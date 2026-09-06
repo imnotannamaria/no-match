@@ -1,36 +1,93 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# nomatch
 
-## Getting Started
+One question: why didn't this document show up in my search?
 
-First, run the development server:
+It runs entirely in the browser, on top of [alyze](https://github.com/turbopuffer/alyze), the tokenizer turbopuffer runs in production, compiled to WebAssembly.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## What this is and is not
+
+Read this part first.
+
+- There is no turbopuffer account in this project. It is not affiliated with turbopuffer
+- No network call is made to their product. Nothing you paste leaves your browser
+- The analysis engine is the real `alyze`, MIT licensed, compiled from a specific commit, recorded in `DECISIONS.md`
+- The BM25 ranking is mine, written for this project in TypeScript. It follows the documented meaning of `k1`, `b` and `k3`, but it is not their code and you should not read it as a reference for how their production ranking behaves
+
+Everything below is what I verified. Nothing here claims parity with production search anywhere.
+
+**Status: nothing works yet.** The repo is a Next app with no features in it. See [docs/GOAL.md](docs/GOAL.md) for where it is going.
+
+## The problem
+
+A search engine does not store your text. It cuts the text into pieces, called tokens, and stores the pieces. When you search, it cuts your search the same way and compares piece to piece. A match happens only when two tokens are exactly equal.
+
+Stored document: `O café da manhã estava ótimo`
+Your search: `cafe`
+
+With `ascii_folding` off, which is the default:
+
+- Token in the document: `café`
+- Token in the search: `cafe`
+- Equal? No
+- Results: zero
+
+The document is there. The word is there. Nothing comes back.
+
+Today the way you find this out is by paying for an account, uploading your data, searching, finding nothing, and then guessing which of five options was the culprit, one at a time.
+
+In English this almost never happens, because English has no accents. It shows up the moment you index Portuguese, French, German or Spanish. That is why I built it.
+
+## What it does
+
+1. Paste a corpus, meaning a list of text documents
+2. Type a search
+3. Pick two tokenizer configurations, A and B, side by side
+4. See which documents come back under each one, ranked by BM25
+5. For the ones that did not come back, see which stage of the pipeline killed them, and which option to turn on
+
+Step 5 is the product. The first four are there to make it possible.
+
+## What it does not do
+
+- No calls to the turbopuffer API
+- No accounts, no login, no persistence. State lives in the tab
+- No file upload. Paste text, or load one of the examples
+- No vector search, no embeddings, no hybrid search. Full text only
+- No comparing three configurations. Two
+
+## How the stage attribution works
+
+`alyze` returns the final result of the analysis, not the steps it took. To find out which step killed a match, nomatch runs the analyzer several times with the options turning on in cascade, then compares the outputs.
+
+```
+S0  tokenize only            case_sensitive: true
+S1  + lowercase              case_sensitive: false
+S2  + remove stopwords       remove_stopwords: true
+S3  + stemming               stemming: true
+S4  + ascii folding          ascii_folding: true
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Stemming and stopword removal only appear from S1 on, because both of them require `case_sensitive: false`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+For one search token against one document token:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- They became equal at some stage: the match needs that stage's option turned on, and that is what the interface tells you to do
+- The document token disappeared at some stage: that stage dropped it. The interface names the stage, and for a stopword it names the word
+- They never became equal: this is not a configuration problem. They are different words
 
-## Learn More
+`max_token_length` sits outside this ladder and is reported on its own, always in bytes.
 
-To learn more about Next.js, take a look at the following resources:
+## Running it
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm install
+npm run dev
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Open http://localhost:3000.
 
-## Deploy on Vercel
+Building the WASM artifact is a separate job, documented in [CLAUDE.md](CLAUDE.md). The compiled file is committed, so you do not need Rust to run the app.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## License
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT. `alyze` is MIT too, and its copyright stays with turbopuffer.
