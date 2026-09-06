@@ -48,7 +48,7 @@ What is actually installed, verified against `package.json`. When this drifts, f
 | Ranking | BM25, written here in TypeScript |
 | Deploy | Vercel |
 
-Not installed yet, and needed: Vitest, entrepta.
+Not installed yet, and needed: entrepta.
 
 No global state manager. No fetch library. No backend. A new dependency needs a line in `DECISIONS.md` saying why.
 
@@ -62,7 +62,8 @@ Everything runs on the client. There is no server.
 app/                     Next routes
 components/              UI, built on entrepta
 lib/
-  alyze/                 shared types and the client that talks to the worker
+  alyze/                 shared types, the client that talks to the worker, option validation
+  search/                whether a document matches: OR, exact phrase
   ladder/                stage attribution
   bm25/                  scoring and ranking
   corpora/               example corpora, pt and en
@@ -122,6 +123,18 @@ Stemming exists for 18 languages. Stopwords exist for all of them except `arabic
 Record the exact `alyze` commit in `DECISIONS.md`. Regenerate the artifact on purpose, never automatically.
 
 **Do not write Rust in this project.** Consume `alyze` as it is. If something looks like it needs a change in the Rust, that is a finding to report in their repo, not a patch to make here.
+
+---
+
+## Matching
+
+Decided whether a document comes back at all, separate from ranking (BM25, phase 4) and separate from explaining a miss (the stage ladder, below). Lives in `lib/search/`, and takes tokens that are already analyzed: it never touches the WASM module.
+
+**OR, not AND.** A document matches if it shares at least one token with the query. `café da manhã` against a document that only has `manhã` still comes back. `ausentes` in the interface means zero tokens in common, not "missing one of several."
+
+**Exact phrase is an option, not a rewrite of OR.** When it's on, a document only matches if the query's tokens appear as a contiguous run, in order. "Contiguous" is measured in position deltas, not array index: every word-like token spends a position even when a filter drops it afterwards (see "alyze" above), so a stopword dropped from both the query and the document at the same relative spot doesn't break the phrase. That is the actual reason `alyze` keeps the gaps instead of compacting positions after filtering; phrase matching is what spends that data. `lib/search/match.test.ts` pins this with a case where a real word sits between the query's terms in the document (correctly not a match) against one where a stopword was dropped identically on both sides (correctly still a match).
+
+The search button is explicit. Neither matching nor the ladder run on a keystroke or a debounce.
 
 ---
 

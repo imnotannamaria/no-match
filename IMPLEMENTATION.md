@@ -9,7 +9,7 @@ The diagrams behind these phases are in [public/board.png](public/board.png): wh
 | Phase | What it is | Status |
 |---|---|---|
 | 1 | WASM in the worker, analyzing one sentence | Done |
-| 2 | Corpus, search, matched or did not match | Not started |
+| 2 | Corpus, search, matched or did not match | Done |
 | 3 | The stage ladder | Not started |
 | 4 | BM25 and ranking | Not started |
 | 5 | A against B | Not started |
@@ -53,13 +53,13 @@ Compile `alyze`, commit the artifact, load it inside a Web Worker, analyze one s
 
 Paste several documents, type a search, get yes or no per document. No ranking, no reasons, no second column.
 
-- [ ] Matching is OR: a document sharing one token with the query comes back
-- [ ] `ausentes` means zero tokens in common, and the count says so
-- [ ] Exact phrase compares position deltas, not array indices, so a stopword dropped identically from both sides does not break the phrase
-- [ ] A real word between the query's terms in the document does break the phrase
-- [ ] The invalid combination (`stemming` or `remove_stopwords` with `case_sensitive: true`) is unreachable in the UI, not merely rejected downstream
-- [ ] `café` against `cafe` returns zero, and turning on `ascii_folding` returns the document
-- [ ] A test pins each of the above
+- [x] Matching is OR: a document sharing one token with the query comes back
+- [x] `ausentes` means zero tokens in common, and the count says so
+- [x] Exact phrase compares position deltas, not array indices, so a stopword dropped identically from both sides does not break the phrase
+- [x] A real word between the query's terms in the document does break the phrase
+- [x] The invalid combination (`stemming` or `remove_stopwords` with `case_sensitive: true`) is unreachable in the UI, not merely rejected downstream
+- [x] `café` against `cafe` returns zero, and turning on `ascii_folding` returns the document
+- [x] A test pins each of the above
 
 **Done when:** the founding example works end to end over a corpus, with tests that fail if it stops working.
 
