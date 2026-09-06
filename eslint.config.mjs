@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored wasm-bindgen glue, built from turbopuffer/alyze. Not ours to
+    // lint. See CLAUDE.md, "Building the WASM artifact".
+    "public/wasm/**",
   ]),
 ]);
 

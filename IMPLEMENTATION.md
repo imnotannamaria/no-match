@@ -8,7 +8,7 @@ The diagrams behind these phases are in [public/board.png](public/board.png): wh
 
 | Phase | What it is | Status |
 |---|---|---|
-| 1 | WASM in the worker, analyzing one sentence | Not started |
+| 1 | WASM in the worker, analyzing one sentence | Done |
 | 2 | Corpus, search, matched or did not match | Not started |
 | 3 | The stage ladder | Not started |
 | 4 | BM25 and ranking | Not started |
@@ -38,12 +38,12 @@ These repeat. They are not listed again inside each phase.
 
 Compile `alyze`, commit the artifact, load it inside a Web Worker, analyze one sentence, show the tokens. No design system, no styling.
 
-- [ ] The artifact is committed and the exact `alyze` commit is in `DECISIONS.md`
-- [ ] `LICENSE` travels with the binary
-- [ ] The UI never calls the WASM module directly, every call goes through the worker
-- [ ] Byte ranges are the raw token's, before normalization, and are shown as such
-- [ ] A WASM load failure is visible to the person, not just in the console
-- [ ] The client rejects pending work if the worker cannot start
+- [x] The artifact is committed and the exact `alyze` commit is in `DECISIONS.md`
+- [x] `LICENSE` travels with the binary
+- [x] The UI never calls the WASM module directly, every call goes through the worker
+- [x] Byte ranges are the raw token's, before normalization, and are shown as such
+- [x] A WASM load failure is visible to the person, not just in the console
+- [x] The client rejects pending work if the worker cannot start
 
 **Done when:** you type a sentence, the tokens appear with position and byte range, and it works in dev and in a served production build.
 

@@ -44,11 +44,11 @@ What is actually installed, verified against `package.json`. When this drifts, f
 | Design system | entrepta, components copied in and owned as code, dark first |
 | Lint | ESLint 9 with `eslint-config-next` |
 | Package manager | npm |
-| Analysis engine | `alyze`, Rust, compiled to WASM and committed under `wasm/` |
+| Analysis engine | `alyze`, Rust, compiled to WASM and committed under `public/wasm/` |
 | Ranking | BM25, written here in TypeScript |
 | Deploy | Vercel |
 
-Not installed yet, and needed: Vitest, entrepta, the WASM artifact.
+Not installed yet, and needed: Vitest, entrepta.
 
 No global state manager. No fetch library. No backend. A new dependency needs a line in `DECISIONS.md` saying why.
 
@@ -62,16 +62,18 @@ Everything runs on the client. There is no server.
 app/                     Next routes
 components/              UI, built on entrepta
 lib/
-  alyze/                 typed wrapper around the WASM module
+  alyze/                 shared types and the client that talks to the worker
   ladder/                stage attribution
   bm25/                  scoring and ranking
   corpora/               example corpora, pt and en
 workers/                 Web Worker hosting the WASM module
-wasm/                    the compiled .wasm artifact, committed
+public/wasm/             the compiled alyze artifact, committed, loaded by URL
 docs/                    GOAL.md and the design canvas
 ```
 
 The WASM module lives in a Web Worker. Running the ladder over a corpus on the main thread blocks it. **The interface never calls the WASM module directly.** Every call goes through the worker.
+
+`public/wasm/` is loaded by URL (`import(/* webpackIgnore: true */ "/wasm/alyze.js")` inside the worker), not through the bundler. It is `alyze-wasm` compiled from a specific commit, not something Turbopack should ever try to rebuild. See `DECISIONS.md` for why it lives there instead of a top-level `wasm/`.
 
 ---
 
@@ -114,8 +116,8 @@ Stemming exists for 18 languages. Stopwords exist for all of them except `arabic
 1. Clone `turbopuffer/alyze`
 2. Install Rust. The crate needs edition 2024 and Rust 1.85 or newer
 3. `alyze` pulls in `ahash`, which depends on `getrandom`. On `wasm32-unknown-unknown`, `getrandom` needs an explicit backend. The crate already declares the `wasm_js` feature, and that has to be paired with `getrandom_backend="wasm_js"` in `.cargo/config.toml`. This is the most likely build failure in the project
-4. Build with `wasm-pack`
-5. Copy the result into `wasm/` and commit it
+4. Build with `wasm-pack build --target web --release --out-name alyze --out-dir pkg` (their own `wasm/build.sh`, unchanged)
+5. Copy `alyze.js`, `alyze_bg.wasm`, `alyze.d.ts` and `LICENSE` into `public/wasm/` and commit them
 
 Record the exact `alyze` commit in `DECISIONS.md`. Regenerate the artifact on purpose, never automatically.
 
