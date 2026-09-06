@@ -12,3 +12,14 @@ export interface MatchResult {
   /** Query terms found in the document. Empty for a phrase match. */
   matchedTerms: string[];
 }
+
+export interface DocumentVerdict extends MatchResult {
+  /**
+   * True when the document shares tokens with the query and exact phrase
+   * order is the only thing that removed it. The words are all there, they
+   * just are not next to each other, so no analysis stage is responsible
+   * and the ladder must not blame one. See lib/ladder, and CLAUDE.md's
+   * review note on attribution correctness.
+   */
+  phraseOnlyMiss: boolean;
+}

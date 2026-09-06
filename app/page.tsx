@@ -1,20 +1,34 @@
 "use client";
 
-// Phase 2: corpus, search, and the binary answer of matched or did not
-// match. Still deliberately plain — no design system yet, that's phase 6.
-// One configuration only; A/B comparison is phase 5.
+// Phase 3: the stage ladder. For every absent document, explain which
+// stage killed the match, per query word. Still plain -- no design system
+// yet, that's phase 6.
 
 import { useEffect, useState } from "react";
 import { analyzerClient } from "@/lib/alyze/client";
 import { sanitizeOptions, canEnableCaseSensitive } from "@/lib/alyze/validate";
 import { DEFAULT_OPTIONS, type AnalysisOptions, type Token } from "@/lib/alyze/types";
-import { matchDocument } from "@/lib/search/match";
+import { evaluateDocument } from "@/lib/search/match";
+import { explainEmptyQuery } from "@/lib/search/empty-query";
 import { EXAMPLE_CORPUS_PT, type ExampleDocument } from "@/lib/corpora/example-pt";
+import { explainDocument, extractRawWords } from "@/lib/ladder/explain";
+import { checkMaxLength } from "@/lib/ladder/max-length";
+import {
+  NEVER_ADVICE,
+  PHRASE_ONLY_MISS,
+  VERDICT_COPY,
+  convergeAdvice,
+  disappearedAdvice,
+  droppedFromQueryAdvice,
+  stageLabel,
+} from "@/lib/ladder/copy";
+import type { DocumentExplanation, LadderExplanation } from "@/lib/ladder/types";
 
 interface DocResult {
   doc: ExampleDocument;
   matched: boolean;
   matchedTerms: string[];
+  phraseOnlyMiss: boolean;
 }
 
 export default function Home() {
@@ -27,6 +41,11 @@ export default function Home() {
   const [results, setResults] = useState<DocResult[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [emptyQueryNote, setEmptyQueryNote] = useState<string | null>(null);
+  // Bumped on every search. Part of each AbsentDoc's key, so a new search
+  // throws away explanations computed for the previous one instead of
+  // leaving a stale answer on screen.
+  const [runId, setRunId] = useState(0);
 
   useEffect(() => {
     analyzerClient.ready().then(
@@ -54,13 +73,23 @@ export default function Home() {
   async function search() {
     setError(null);
     setSearching(true);
+    setEmptyQueryNote(null);
+    setRunId((n) => n + 1);
     try {
       const queryTokens: Token[] = await analyzerClient.analyze(query, options);
+
+      if (queryTokens.length === 0) {
+        const note = await explainEmptyQuery(query, options);
+        setEmptyQueryNote(note);
+        setResults(null);
+        return;
+      }
+
       const docResults = await Promise.all(
         docs.map(async (doc) => {
           const docTokens = await analyzerClient.analyze(doc.text, options);
-          const { matched, matchedTerms } = matchDocument(queryTokens, docTokens, { phrase });
-          return { doc, matched, matchedTerms };
+          const verdict = evaluateDocument(queryTokens, docTokens, { phrase });
+          return { doc, ...verdict };
         }),
       );
       setResults(docResults);
@@ -78,10 +107,12 @@ export default function Home() {
 
   return (
     <main style={{ padding: 24, fontFamily: "monospace", maxWidth: 960 }}>
-      <h1>nomatch — phase 2</h1>
+      <h1>nomatch — phase 3</h1>
+
       {bootError ? (
-        <p role="alert" style={{ color: "red" }}>
-          o analisador não carregou: {bootError}. Sem ele nada aqui funciona.
+        <p role="alert" style={{ color: "#b91c1c" }}>
+          o analisador não carregou: {bootError}. Sem ele nada aqui funciona. Recarregue a página;
+          se continuar, o arquivo em /wasm/ pode não estar sendo servido.
         </p>
       ) : (
         <p>{ready ? "analyzer loaded" : "loading analyzer..."}</p>
@@ -159,7 +190,12 @@ export default function Home() {
         <button onClick={search} disabled={!ready || searching} style={{ marginTop: 8 }}>
           {searching ? "searching..." : "buscar"}
         </button>
-        {error && <p style={{ color: "red" }}>{error}</p>}
+        {error && (
+          <p role="alert" style={{ color: "#b91c1c" }}>
+            {error}
+          </p>
+        )}
+        {emptyQueryNote && <p style={{ color: "#b45309" }}>{emptyQueryNote}</p>}
       </section>
 
       <section style={{ marginBottom: 16 }}>
@@ -174,8 +210,11 @@ export default function Home() {
               onChange={(e) => updateDoc(d.id, e.target.value)}
               rows={1}
               style={{ flex: 1, fontFamily: "monospace" }}
+              aria-label={`documento ${d.id}`}
             />
-            <button onClick={() => removeDoc(d.id)}>×</button>
+            <button onClick={() => removeDoc(d.id)} aria-label={`remover ${d.id}`}>
+              ×
+            </button>
           </div>
         ))}
       </section>
@@ -193,15 +232,165 @@ export default function Home() {
           </ul>
 
           <h2 style={{ fontSize: 14 }}>ausentes · {absent.length}</h2>
-          <ul>
-            {absent.map((r) => (
-              <li key={r.doc.id}>
-                <strong>{r.doc.id}</strong>: {r.doc.text}
-              </li>
-            ))}
-          </ul>
+          {absent.map((r) => (
+            <AbsentDoc
+              key={`${r.doc.id}::${runId}`}
+              doc={r.doc}
+              query={query}
+              options={options}
+              phraseOnlyMiss={r.phraseOnlyMiss}
+            />
+          ))}
         </section>
       )}
     </main>
+  );
+}
+
+function AbsentDoc({
+  doc,
+  query,
+  options,
+  phraseOnlyMiss,
+}: {
+  doc: ExampleDocument;
+  query: string;
+  options: AnalysisOptions;
+  phraseOnlyMiss: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [explanation, setExplanation] = useState<DocumentExplanation | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+
+  async function explain() {
+    setOpen(true);
+    if (explanation) return; // this instance is scoped to one search, so it stays valid
+    setLoading(true);
+    setFailed(null);
+    try {
+      const [queryWords, docWords] = await Promise.all([
+        extractRawWords(query),
+        extractRawWords(doc.text),
+      ]);
+      setExplanation(await explainDocument(queryWords, docWords, options, phraseOnlyMiss));
+    } catch (err) {
+      setFailed(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={{ marginBottom: 8, borderLeft: "2px solid #ccc", paddingLeft: 8 }}>
+      <div>
+        <strong>{doc.id}</strong>: {doc.text}{" "}
+        <button onClick={explain} disabled={loading} aria-expanded={open}>
+          {loading ? "analisando..." : "por que não bateu?"}
+        </button>
+      </div>
+
+      {failed && (
+        <p role="alert" style={{ color: "#b91c1c" }}>
+          não deu para analisar: {failed}
+        </p>
+      )}
+
+      {open && explanation && (
+        <div style={{ marginTop: 4, marginBottom: 8 }}>
+          {explanation.phraseOnlyMiss && (
+            <p style={{ fontSize: 12, background: "#fff7ed", padding: 8, margin: "6px 0" }}>
+              {PHRASE_ONLY_MISS}
+            </p>
+          )}
+          {explanation.words.map((word) => (
+            <LadderView
+              key={word.queryWord}
+              exp={word}
+              maxTokenLength={options.max_token_length}
+              phraseOnlyMiss={explanation.phraseOnlyMiss}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LadderView({
+  exp,
+  maxTokenLength,
+  phraseOnlyMiss,
+}: {
+  exp: LadderExplanation;
+  maxTokenLength: number;
+  phraseOnlyMiss: boolean;
+}) {
+  const length = checkMaxLength(exp.queryWord, maxTokenLength);
+
+  return (
+    <div style={{ margin: "6px 0", padding: 8, background: "#f7f7f7", fontSize: 12 }}>
+      <div>
+        <strong>&quot;{exp.queryWord}&quot;</strong>{" "}
+        {exp.droppedFromQuery ? (
+          droppedFromQueryAdvice(exp.droppedFromQuery.reason, exp.droppedFromQuery.bytes, maxTokenLength)
+        ) : phraseOnlyMiss ? (
+          <>está neste documento. A frase exata é que não fecha.</>
+        ) : exp.kind === "converge" && exp.stage ? (
+          <>
+            só fica igual a &quot;{exp.docWord}&quot; a partir do estágio {exp.stage}.{" "}
+            {convergeAdvice(exp.stage)}
+          </>
+        ) : exp.kind === "disappeared" && exp.stage ? (
+          disappearedAdvice(exp.stage, exp.docWord ?? exp.queryWord)
+        ) : (
+          NEVER_ADVICE
+        )}
+      </div>
+
+      {!exp.droppedFromQuery && length.exceeds && (
+        <div style={{ color: "#b91c1c", marginTop: 4 }}>
+          Separado disso: essa palavra ocupa {length.bytes} bytes
+          {length.bytes !== length.chars && ` (${length.chars} caracteres)`}, acima do limite de{" "}
+          {maxTokenLength}. Aumente max_token_length para ela virar um token.
+        </div>
+      )}
+
+      {exp.rows && (
+        <table style={{ marginTop: 6, borderCollapse: "collapse" }}>
+          <caption style={{ captionSide: "top", textAlign: "left", fontSize: 11, color: "#555" }}>
+            o que cada etapa faz com as duas palavras
+          </caption>
+          <thead>
+            <tr>
+              <th align="left" scope="col">
+                etapa
+              </th>
+              <th align="left" scope="col">
+                busca
+              </th>
+              <th align="left" scope="col">
+                documento
+              </th>
+              <th align="left" scope="col">
+                resultado
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {exp.rows.map((row) => (
+              <tr key={row.stage}>
+                <th align="left" scope="row" style={{ fontWeight: "normal" }}>
+                  {stageLabel(row.stage)}
+                </th>
+                <td>{row.queryForm ?? "descartada"}</td>
+                <td>{row.docForm ?? "descartada"}</td>
+                <td>{VERDICT_COPY[row.verdict]}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
   );
 }

@@ -51,3 +51,49 @@ The design canvas had a slot for a corpus limit note. Asked, and there was no re
 `lib/search/match.ts` and `lib/alyze/validate.ts` are pure functions over already-analyzed tokens, no WASM dependency, so they run under plain Node with no browser and no worker. `vitest.config.mts` aliases `@` to the repo root to match `tsconfig.json`. Config is `.mts` on purpose: Vite's native config loader warns about ESM syntax in a `.ts` file loaded as CommonJS otherwise, since the project itself isn't `"type": "module"`.
 
 The end-to-end path (WASM to worker to match) stays covered by a Playwright smoke test against the running app, not by the Vitest suite. Vitest tests the logic; the smoke test proves the pipeline is actually wired together, in both `npm run dev` and a real `npm run build` + `npm run start`.
+
+## Phase 3
+
+### The ladder is context-free
+
+The five stages always walk `S0` to `S4` in the fixed order CLAUDE.md documents, regardless of what a column's active options actually are. The active options only decide which documents are absent in the first place (`lib/search/match.ts`); the ladder explains it independently, by calling `analyze()` on a single word at each stage. This turned out to have a nice side effect: I don't need to separately account for what's "currently on" in the column to classify a pair. See "disappeared" below for why.
+
+### Classifying converge vs. disappeared vs. never
+
+For a (query word, document word) pair, walk all 5 stages and track two things: the first stage where both sides are alive and textually equal (`convergeIndex`), and the first stage where the document word goes from alive to dropped (`dropIndex`, only `remove_stopwords` can do this in this model; `stemming` and `ascii_folding` only transform text, `max_token_length` is handled separately, see below).
+
+`convergeIndex`, when it exists, is structurally always before `dropIndex`, because the match check requires both sides alive. A dropped (null) token can never equal anything. That means:
+
+- Both exist -> `disappeared`. The document word is textually identical to the query word at an early stage, but a later stage drops it. In practice this only happens when the shared word is a stopword and the user is literally searching for it.
+- Only `convergeIndex` exists -> `converge`, at that stage. The café / cafe case: `converge` at S4.
+- Neither exists -> `never`. Different words, not a configuration issue.
+
+One document gets one `LadderExplanation` per query word, not one collapsed verdict for the whole document. Under OR matching, every query word failed to match anything in an absent document, so each gets its own story; collapsing to a single "best" word would hide the others. This is a small, deliberate departure from the design canvas, which shows one ladder table per panel open. The design predates having working search and ladder code, and showing every query word's story is more honest than picking one and hiding the rest. Panel layout is a phase 5/6 concern; the data model here isn't going to change to fit a single-table view.
+
+### A real finding: stemming runs before folding, and that can un-converge two forms of the same word
+
+Verified against the running app, not assumed. Query "manha" (no accent) against document "manhã" (accented), both under the ladder's fixed cascade, language portuguese:
+
+| stage | manha | manhã |
+|---|---|---|
+| S0–S2 | manha | manhã |
+| S3 (+ stemming) | `manh` | manhã (unchanged) |
+| S4 (+ ascii_folding) | manh | `manha` |
+
+The Portuguese stemmer strips the final vowel from "manha" (an unaccented word matching its suffix rules) but leaves "manhã" untouched. The accent means it doesn't match the same pattern. Because `ascii_folding` runs after stemming (CLAUDE.md, "alyze"), by the time "manhã" gets folded to "manha", "manha" (the query) has already been stemmed down to "manh". They never converge, correctly, per the ladder's own rules. It's a real example of two forms of what a person would call the same word ending up classified `never`, because of pipeline order, not because the ladder is wrong. Left as `never`; the ladder is reporting the pipeline honestly. `correr`/`correu` is used as the stemming test case instead of an accented pair, specifically to keep that test from tripping over this interaction.
+
+### Query that becomes empty after analysis
+
+Typing a whole query that's entirely stopwords (or entirely over `max_token_length`) makes the live, analyzed query zero tokens. That's different from an empty search box, and different from "no documents matched": there is nothing to compare against any document. `lib/search/empty-query.ts` checks this before running any per-document search: if `remove_stopwords` is on and re-analyzing with it off produces tokens, blame stopwords by name; otherwise point at `max_token_length`. Verified: searching "da" with `remove_stopwords` on and `language: portuguese` (a real Portuguese stopword) correctly stops before the ladder ever runs, with a message naming the reason.
+
+### Exact phrase gets its own answer, decided outside the ladder
+
+A document can hold every word of the query and still be absent, because exact phrase order removed it. The ladder cannot see that: it compares one query word against one document word, and from where it stands every word converges. Left alone it reports five stages of `match` on a document listed as absent, and tells the reader to turn an option on. Every statement in that panel is wrong.
+
+`evaluateDocument` in `lib/search/match.ts` is the only place that can know, because it is the only place holding both results on the same tokens: the phrase result that removed the document, and the OR result that would have kept it. When phrase removed it and OR would not have, it sets `phraseOnlyMiss`, and the ladder is told rather than left to guess.
+
+The panel then leads with the phrase explanation and still shows the per-word tables underneath, because those tables are the proof the words really are all there. Pinned by tests in `lib/search/match.test.ts`.
+
+### max_token_length stays separate
+
+`lib/ladder/max-length.ts` checks byte length against the active `max_token_length` independently of the ladder classification, and the UI shows it alongside a `never` verdict rather than instead of it. A document can simultaneously have "no word here is even close" and, separately, a search term too long to ever become a token. Verified with a 48-byte all-ASCII word against the default 39-byte limit.

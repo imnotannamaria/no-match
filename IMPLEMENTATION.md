@@ -10,7 +10,7 @@ The diagrams behind these phases are in [public/board.png](public/board.png): wh
 |---|---|---|
 | 1 | WASM in the worker, analyzing one sentence | Done |
 | 2 | Corpus, search, matched or did not match | Done |
-| 3 | The stage ladder | Not started |
+| 3 | The stage ladder | Done |
 | 4 | BM25 and ranking | Not started |
 | 5 | A against B | Not started |
 | 6 | Corpora and polish | Not started |
@@ -69,16 +69,16 @@ Paste several documents, type a search, get yes or no per document. No ranking, 
 
 The part that turns this into a product. Run the analysis in cascade, compare, and say which stage killed the match.
 
-- [ ] The cascade is S0 to S4 in the documented order, with `ascii_folding` last
-- [ ] `max_token_length` is evaluated and reported separately, never folded into the cascade, always in bytes
-- [ ] Four known cases pass in tests: an accent, a Portuguese stopword, a stemming root, a token over the byte limit
-- [ ] The ladder runs once per document per query, behind an explicit action, never on a keystroke
-- [ ] A query that analyzes down to zero tokens is caught before the ladder runs, and says why
-- [ ] The verdict never contradicts the match result that produced it
-- [ ] The explanation on screen always belongs to the current query and current options
-- [ ] The recommendation names the option and says what it does, not just the stage id
-- [ ] No internal identifier is printed to a person
-- [ ] A query word dropped from the search is reported as dropped, not as a different word
+- [x] The cascade is S0 to S4 in the documented order, with `ascii_folding` last
+- [x] `max_token_length` is evaluated and reported separately, never folded into the cascade, always in bytes
+- [x] Four known cases pass in tests: an accent, a Portuguese stopword, a stemming root, a token over the byte limit
+- [x] The ladder runs once per document per query, behind an explicit action, never on a keystroke
+- [x] A query that analyzes down to zero tokens is caught before the ladder runs, and says why
+- [x] The verdict never contradicts the match result that produced it
+- [x] The explanation on screen always belongs to the current query and current options
+- [x] The recommendation names the option and says what it does, not just the stage id
+- [x] No internal identifier is printed to a person
+- [x] A query word dropped from the search is reported as dropped, not as a different word
 
 **Done when:** every absent document gets a reason, the reason is true, and a person who has never heard the word "token" can act on it.
 

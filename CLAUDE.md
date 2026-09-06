@@ -63,7 +63,7 @@ app/                     Next routes
 components/              UI, built on entrepta
 lib/
   alyze/                 shared types, the client that talks to the worker, option validation
-  search/                whether a document matches: OR, exact phrase
+  search/                whether a document matches, and whether the query survived analysis
   ladder/                stage attribution
   bm25/                  scoring and ranking
   corpora/               example corpora, pt and en

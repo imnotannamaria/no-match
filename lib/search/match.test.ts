@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { orMatch, phraseMatch } from "@/lib/search/match";
+import { evaluateDocument, orMatch, phraseMatch } from "@/lib/search/match";
 import type { Token } from "@/lib/alyze/types";
 
 // Tokens are hand-built here rather than run through the real WASM module:
@@ -80,5 +80,40 @@ describe("phraseMatch", () => {
   it("an empty query never matches", () => {
     const doc = [tok("café", 0)];
     expect(phraseMatch([], doc).matched).toBe(false);
+  });
+});
+
+describe("evaluateDocument", () => {
+  const doc = [tok("tomamos", 0), tok("café", 1), tok("e", 2), tok("conversamos", 3), tok("manhã", 4)];
+
+  it("in OR mode there is no such thing as a phrase-only miss", () => {
+    const query = [tok("café", 0), tok("manhã", 1)];
+    const result = evaluateDocument(query, doc, { phrase: false });
+    expect(result.matched).toBe(true);
+    expect(result.phraseOnlyMiss).toBe(false);
+  });
+
+  it("flags a phrase-only miss: every word is here, they are just not adjacent", () => {
+    // This is the case that made the ladder assert something false: all
+    // five stages report a match, yet the document is absent. Nothing the
+    // ladder can see explains it, so the flag has to come from here.
+    const query = [tok("café", 0), tok("manhã", 1)];
+    const result = evaluateDocument(query, doc, { phrase: true });
+    expect(result.matched).toBe(false);
+    expect(result.phraseOnlyMiss).toBe(true);
+  });
+
+  it("does not flag a phrase-only miss when the words are not in the document at all", () => {
+    const query = [tok("restaurante", 0), tok("almoço", 1)];
+    const result = evaluateDocument(query, doc, { phrase: true });
+    expect(result.matched).toBe(false);
+    expect(result.phraseOnlyMiss).toBe(false);
+  });
+
+  it("a real phrase match is not a miss of any kind", () => {
+    const query = [tok("conversamos", 0), tok("manhã", 1)];
+    const result = evaluateDocument(query, doc, { phrase: true });
+    expect(result.matched).toBe(true);
+    expect(result.phraseOnlyMiss).toBe(false);
   });
 });

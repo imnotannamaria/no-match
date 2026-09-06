@@ -7,7 +7,7 @@
 // dependency on the WASM module, which is what keeps it cheap to test.
 
 import type { Token } from "@/lib/alyze/types";
-import type { MatchOptions, MatchResult } from "@/lib/search/types";
+import type { DocumentVerdict, MatchOptions, MatchResult } from "@/lib/search/types";
 
 /**
  * A document matches if it shares at least one token with the query. This
@@ -60,10 +60,28 @@ export function phraseMatch(queryTokens: Token[], docTokens: Token[]): MatchResu
   return { matched: false, matchedTerms: [] };
 }
 
-export function matchDocument(
+/**
+ * The one call the UI makes per document. Beyond matched or not, it
+ * reports whether exact phrase order is the sole reason a document was
+ * removed: the words are all present, just not adjacent. Without that
+ * flag the ladder has no way to know, and blames an analysis stage for
+ * something no stage did.
+ */
+export function evaluateDocument(
   queryTokens: Token[],
   docTokens: Token[],
   options: MatchOptions,
-): MatchResult {
-  return options.phrase ? phraseMatch(queryTokens, docTokens) : orMatch(queryTokens, docTokens);
+): DocumentVerdict {
+  const or = orMatch(queryTokens, docTokens);
+
+  if (!options.phrase) {
+    return { ...or, phraseOnlyMiss: false };
+  }
+
+  const asPhrase = phraseMatch(queryTokens, docTokens);
+  return {
+    matched: asPhrase.matched,
+    matchedTerms: asPhrase.matched ? asPhrase.matchedTerms : or.matchedTerms,
+    phraseOnlyMiss: !asPhrase.matched && or.matched,
+  };
 }
