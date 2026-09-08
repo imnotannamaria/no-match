@@ -9,7 +9,7 @@ For what the tool is and who it is for, see [README.md](README.md). For why I am
 
 ## Scope
 
-The tool does five things. Nothing else gets added without a line in `DECISIONS.md`.
+The tool does five things. Nothing else gets added without a line in `docs/DECISIONS.md`.
 
 1. Paste a corpus of text documents
 2. Type a search
@@ -50,7 +50,7 @@ What is actually installed, verified against `package.json`. When this drifts, f
 
 Not installed yet, and needed: entrepta.
 
-No global state manager. No fetch library. No backend. A new dependency needs a line in `DECISIONS.md` saying why.
+No global state manager. No fetch library. No backend. A new dependency needs a line in `docs/DECISIONS.md` saying why.
 
 ---
 
@@ -59,22 +59,27 @@ No global state manager. No fetch library. No backend. A new dependency needs a 
 Everything runs on the client. There is no server.
 
 ```
-app/                     Next routes
-components/              UI, built on entrepta
+app/
+  page.tsx               the one route, and the state that ties it together
+  components/            the interface
+  components/entrepta/   design system components, copied in and owned as code
 lib/
-  alyze/                 shared types, the client that talks to the worker, option validation
+  alyze/                 shared types, the client that talks to the worker, validation, schema
   search/                whether a document matches, and whether the query survived analysis
-  ladder/                stage attribution
+  ladder/                stage attribution, and the fix it suggests
   bm25/                  scoring and ranking
+  tokens/                positions and their holes
   corpora/               example corpora, pt and en
+  columns.ts             what a column is, and how A and B open
 workers/                 Web Worker hosting the WASM module
 public/wasm/             the compiled alyze artifact, committed, loaded by URL
-docs/                    GOAL.md and the design canvas
+public/board.png         the diagrams the phases were planned from
+docs/                    GOAL.md, DECISIONS.md, IMPLEMENTATION.md
 ```
 
 The WASM module lives in a Web Worker. Running the ladder over a corpus on the main thread blocks it. **The interface never calls the WASM module directly.** Every call goes through the worker.
 
-`public/wasm/` is loaded by URL (`import(/* webpackIgnore: true */ "/wasm/alyze.js")` inside the worker), not through the bundler. It is `alyze-wasm` compiled from a specific commit, not something Turbopack should ever try to rebuild. See `DECISIONS.md` for why it lives there instead of a top-level `wasm/`.
+`public/wasm/` is loaded by URL (`import(/* webpackIgnore: true */ "/wasm/alyze.js")` inside the worker), not through the bundler. It is `alyze-wasm` compiled from a specific commit, not something Turbopack should ever try to rebuild. See `docs/DECISIONS.md` for why it lives there instead of a top-level `wasm/`.
 
 ---
 
@@ -120,7 +125,7 @@ Stemming exists for 18 languages. Stopwords exist for all of them except `arabic
 4. Build with `wasm-pack build --target web --release --out-name alyze --out-dir pkg` (their own `wasm/build.sh`, unchanged)
 5. Copy `alyze.js`, `alyze_bg.wasm`, `alyze.d.ts` and `LICENSE` into `public/wasm/` and commit them
 
-Record the exact `alyze` commit in `DECISIONS.md`. Regenerate the artifact on purpose, never automatically.
+Record the exact `alyze` commit in `docs/DECISIONS.md`. Regenerate the artifact on purpose, never automatically.
 
 **Do not write Rust in this project.** Consume `alyze` as it is. If something looks like it needs a change in the Rust, that is a finding to report in their repo, not a patch to make here.
 
@@ -186,23 +191,21 @@ Keep the implementation short and readable. The formula is public. The value her
 
 ## Design
 
-The canvas is at [docs/design/nomatch.html](docs/design/nomatch.html). Open it before changing layout. It is the source of truth for what the screen does.
-
-entrepta, dark first, theme `bosco` (blue `#2563eb`). Mono is the default UI font, serif for the big numbers and panel titles, sans only in long prose. Same editor language as the rest of my sites: `◆` for section marks, `//` for comments, a brand status bar pinned to the bottom.
+entrepta, dark first, theme `bosco` (blue `#2563eb`). Mono is the default UI font, serif for the big counts and panel titles. `◆` marks a section, `//` introduces a comment, and a brand status bar sits at the bottom.
 
 The screen, top to bottom:
 
 - Header: `nomatch.` with the brand dot, the question as a `//` comment, and the one-line lesson on the right, `o match é entre tokens, não entre palavras`
-- The search input, wide and 22px, centered at 760px. Boot state is a shimmer that says what is loading: `abrindo o analisador · lista de stopwords + stemmer`
-- Corpus panel on the left, 300px, collapsible into a vertical rail. Example picker, one textarea per document, add and remove
-- Columns A and B in a two-track grid. Language select, the six toggles, the invalid-combination note, the parameters disclosure, then a 44px serif count, then the results, then `ausentes · N`
-- Every absent row carries its reason inline, with a colored left border. Clicking one opens the panel
-- Side panel, 560px, two tabs. The ladder table is `etapa / busca / documento / verdict`, one row per stage, with a verdict box under it and a button that turns the fixing option on. Blue rows are the simulation, options not currently on in that column
-- Token tab: chips for query and document tokens, position holes included, with the bytes note under them
-- Fixed bottom left: `◆ schema · full_text_search`, the config for both columns as JSON, with copy per column
-- Status bar, 26px, brand fill, pinned
+- The search input, 22px, centered at 760px, with the search button under it. One search feeds both columns
+- Corpus panel on the left, 300px, collapsible into a vertical rail above `lg`. Corpus picker, one textarea per document, add and remove
+- Columns A and B in a two-track grid, one `Column` component with different props. Language select, four analysis toggles plus exact phrase, the blocked-combination note, the ranking parameters behind a disclosure, then a 44px serif count, then the ranked results, then `ausentes · N`
+- Every absent row is a button. Clicking one opens the side panel for that document in that column
+- Side panel, 560px, two tabs. The ladder table is `etapa / busca / documento / resultado`, one row per stage, and under it the button that applies the fix to the other column
+- Token tab: one chip per position, holes included, with bytes and, when they differ, characters
+- Fixed bottom left, `lg` and up: `◆ schema · full_text_search`, both columns as JSON, copy per column
+- Status bar, brand fill, pinned, hidden below `sm`
 
-Interface copy is in Portuguese, because the problem is a Portuguese problem. Docs and code are in English.
+Interface copy is in Portuguese, because the problem is a Portuguese problem. Docs, code and commit messages are in English.
 
 **A badly written stage explanation is a bug**, not a caption. Interface text is the product here.
 
@@ -231,7 +234,7 @@ Each phase ends with something that works. Do not skip a phase. Do not start the
 5. Side by side comparison of A and B
 6. Example corpora in Portuguese and English, and polish
 
-`DECISIONS.md` holds the non-obvious calls: the `alyze` commit, ladder decisions, rounding in BM25, any new dependency.
+`docs/DECISIONS.md` holds the non-obvious calls: the `alyze` commit, ladder decisions, rounding in BM25, any new dependency.
 
 ---
 
@@ -273,7 +276,7 @@ These are prompts to look, not a list to tick. A diff that touches none of them 
 - **Invalid combinations.** `stemming` or `remove_stopwords` with `case_sensitive: true` has to be unreachable in the UI, not merely rejected downstream. Check the toggle logic, not just the validator
 - **Main thread.** Any WASM call outside the worker, and any ladder run wired to a keystroke rather than a settled query. Both are silent: the app works and then locks up on a corpus that is one size larger than the one you tested
 - **Honesty.** Any new copy that claims parity with production behavior anywhere, or presents the BM25 here as someone else's. The README's first section is the standard, and it applies to interface text too
-- **Scope.** Does the diff add something from the "what it does not do" list, or a third configuration column, or a dependency with no line in `DECISIONS.md`?
+- **Scope.** Does the diff add something from the "what it does not do" list, or a third configuration column, or a dependency with no line in `docs/DECISIONS.md`?
 - **Reuse before invention.** A new panel that hand-rolls a card surface, a header, or a hover is re-implementing something that exists. The tell is inline styles that add up to the card class, or a `useState` doing what `:hover` does
 - **Standardization.** Does this screen look like it belongs to the same tool as the rest? Column A and column B are the same component with different props, and any drift between them is a bug by definition. The second copy of a pattern is a warning, the third is a bug. When a diff adds copy number two, say so even if extracting is out of scope
 - **Accessibility.** Real semantics over roles on divs, `aria-pressed` on the toggles, screen reader text for anything carried by color or a glyph alone. The absent rows lean on a colored left border, so the reason has to be in text as well as in the color. Contrast on top of `--fg-brand`, which is where white text fails first

@@ -44,7 +44,7 @@ Went in expecting to skip this unless it was simple. It was: `alyze` already ret
 
 ### No corpus size limit
 
-The design canvas had a slot for a corpus limit note. Asked, and there was no reasoning behind it beyond the mockup needing something in that space. Phase 2's matching is one analysis pass per document per search, which is cheap regardless of corpus size. No limit added. Revisit this in phase 3: the stage ladder runs the analyzer several times per document per query, and that is where a large pasted corpus could actually get slow enough to matter.
+The first sketch of the interface reserved space for a corpus limit note. Asked, and there was no reasoning behind it beyond the layout needing something there. Phase 2's matching is one analysis pass per document per search, which is cheap regardless of corpus size. No limit added. Revisit this in phase 3: the stage ladder runs the analyzer several times per document per query, and that is where a large pasted corpus could actually get slow enough to matter.
 
 ### Vitest installed
 
@@ -68,7 +68,7 @@ For a (query word, document word) pair, walk all 5 stages and track two things: 
 - Only `convergeIndex` exists -> `converge`, at that stage. The café / cafe case: `converge` at S4.
 - Neither exists -> `never`. Different words, not a configuration issue.
 
-One document gets one `LadderExplanation` per query word, not one collapsed verdict for the whole document. Under OR matching, every query word failed to match anything in an absent document, so each gets its own story; collapsing to a single "best" word would hide the others. This is a small, deliberate departure from the design canvas, which shows one ladder table per panel open. The design predates having working search and ladder code, and showing every query word's story is more honest than picking one and hiding the rest. Panel layout is a phase 5/6 concern; the data model here isn't going to change to fit a single-table view.
+One document gets one `LadderExplanation` per query word, not one collapsed verdict for the whole document. Under OR matching, every query word failed to match anything in an absent document, so each gets its own story; collapsing to a single "best" word would hide the others. This is a small, deliberate departure from the first sketch, which showed one ladder table per panel open. That sketch predates having working search and ladder code, and showing every query word's story is more honest than picking one and hiding the rest. Panel layout is a phase 5/6 concern; the data model here isn't going to change to fit a single-table view.
 
 ### A real finding: stemming runs before folding, and that can un-converge two forms of the same word
 
@@ -124,13 +124,13 @@ Measured in the browser by counting `Worker.prototype.postMessage`: a search ove
 
 ### Scores are shown to three decimals
 
-Enough to separate two close documents in a small corpus, short enough for the narrow column the design reserves for it.
+Enough to separate two close documents in a small corpus, short enough for a narrow column.
 
 ## Phase 5
 
 ### entrepta, theme bosco
 
-`npx @entrepta/cli@latest init --theme bosco`, then `add button badge input status-bar tabs`. Bosco is the blue the design canvas was drawn in, and its `--fg-brand` is `#2563eb`. The components land in `app/components/entrepta/` as owned code: they are edited directly rather than wrapped from outside.
+`npx @entrepta/cli@latest init --theme bosco`, then `add button badge input status-bar tabs`. Bosco is the blue this interface was sketched in, and its `--fg-brand` is `#2563eb`. The components land in `app/components/entrepta/` as owned code: they are edited directly rather than wrapped from outside.
 
 New dependencies come with it: `clsx`, `tailwind-merge` and `class-variance-authority` for the `cn()` helper and variant definitions, `@radix-ui/react-slot` for `asChild`, `@radix-ui/react-tabs`, and `lucide-react` for the loading spinner. All of them arrived with the design system rather than being chosen separately.
 
@@ -169,3 +169,23 @@ Columns stack, the corpus panel becomes full width, the side panel goes full wid
 `CLAUDE.md` said brand accents derive from `--fg-brand` with `color-mix()`. This build of entrepta does not work that way: it defines the brand tints per theme as rgba literals, `--bg-surface-brand` among them, so there is nothing to mix at the call site. The intent of the rule holds, and is what the code does: no hardcoded hex anywhere in `app/` or `lib/`, every colour a token, so changing the theme changes the whole tool. The rule text now describes the mechanism that exists rather than one that does not.
 
 While checking it, two error messages were rendering in brand blue, which reads as information rather than failure. They use `--status-error-fg` now.
+
+## Phase 6
+
+### Two corpora, each failing for its own reason
+
+Portuguese is the point of the project: `cafe` does not find `café` until accents are folded. English has no accents, so that failure is close to invisible there, which is exactly why the second corpus exists. What breaks in English is a plural: `cafes` does not find `cafe` until stemming is on.
+
+So a corpus carries its own search and its own fix, and the picker swaps all three together. An English search against a Portuguese corpus would prove nothing. Column B opens with whichever option that corpus needs, so both corpora open on the same contrast, 1 against 3, for different reasons.
+
+### The opening search runs on its own
+
+The tool has 30 seconds to explain itself, and a screen of empty columns spends them. Once the analyzer reports ready, one search runs with the opening corpus, so the contrast is on screen before anyone touches anything. Measured at about 800ms from navigation to both counts rendered.
+
+This does not weaken the rule that the ladder never runs on a keystroke. It runs once on arrival and once per corpus swap, both of which are single events, and the per-document explanation still waits for a click.
+
+`runSearch` takes what to search rather than reading state, so the opening search and a corpus swap can run with values React has not committed yet. That removes a class of stale-closure bug rather than working around it.
+
+### The README now describes a tool that exists
+
+It said "nothing works yet", which stopped being true at phase 1 and would have been the first thing a reader saw. Every claim in it was re-checked against the running app. The one worth testing rather than asserting is that nothing leaves the browser: loading the page, running a search on text typed into it, and opening an explanation produces 25 requests, all to localhost, and zero to anywhere else.

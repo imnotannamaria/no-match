@@ -10,12 +10,12 @@ Read this part first.
 
 - There is no turbopuffer account in this project. It is not affiliated with turbopuffer
 - No network call is made to their product. Nothing you paste leaves your browser
-- The analysis engine is the real `alyze`, MIT licensed, compiled from a specific commit, recorded in `DECISIONS.md`
+- The analysis engine is the real `alyze`, MIT licensed, compiled from a specific commit, recorded in `docs/DECISIONS.md`
 - The BM25 ranking is mine, written for this project in TypeScript. It follows the documented meaning of `k1`, `b` and `k3`, but it is not their code and you should not read it as a reference for how their production ranking behaves
 
 Everything below is what I verified. Nothing here claims parity with production search anywhere.
 
-**Status: nothing works yet.** The repo is a Next app with no features in it. See [docs/GOAL.md](docs/GOAL.md) for where it is going.
+It opens with a corpus loaded and a search already run, so the problem is on screen before you touch anything.
 
 ## The problem
 
@@ -84,9 +84,25 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000.
+Open http://localhost:3000. It opens with the Portuguese corpus and the search `cafe`. Column A is the real defaults, with everything off, and finds one document. Column B has `ascii_folding` on and finds three. The two missing documents spell `café` with the accent.
+
+Click any document under `ausentes` to see which stage of the pipeline removed it, and a button that applies the fix to the other column so you can read both side by side.
+
+The English corpus fails for a different reason, which is the point of having it: English has no accents, so the same problem is close to invisible. What breaks there is a plural. `cafes` does not find `cafe` until stemming is on.
 
 Building the WASM artifact is a separate job, documented in [CLAUDE.md](CLAUDE.md). The compiled file is committed, so you do not need Rust to run the app.
+
+```bash
+npm run test        # the ladder, matching, BM25, byte counts
+npm run lint
+npx tsc --noEmit
+```
+
+## Ranking
+
+BM25, written here, over the tokens `alyze` returns. It decides the order of the documents that already matched, and never decides whether a document comes back.
+
+`k1`, `b` and `k3` are adjustable per column, and moving them reorders the list without re-analyzing anything: the analyzed tokens are already in memory, so a slider costs zero calls to the analyzer. The IDF is the smoothed form, `ln(1 + (N - n + 0.5) / (n + 0.5))`, because the textbook form goes negative on a corpus this small and a negative score on screen costs more trust than the precision is worth.
 
 ## License
 

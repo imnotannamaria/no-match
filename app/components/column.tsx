@@ -157,7 +157,7 @@ export function Column({ id, config, result, ranked, onChangeConfig, onOpenPanel
             count === 0 ? "text-[var(--fg-muted)]" : "text-[var(--fg-primary)]"
           }`}
         >
-          {count ?? "—"}
+          {count ?? "·"}
         </p>
         <p className="mt-1.5 text-[11px] text-[var(--fg-muted)]">
           {result === null

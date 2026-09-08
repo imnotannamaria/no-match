@@ -3,7 +3,7 @@ import { classifyPair, buildLadderRows } from "@/lib/ladder/classify";
 
 // Forms are hand-built here, matching what a real analyze() call against
 // each stage returns -- verified empirically against the WASM module
-// (see DECISIONS.md, phase 3) rather than assumed. Index order is
+// (see docs/DECISIONS.md, phase 3) rather than assumed. Index order is
 // [S0, S1, S2, S3, S4].
 
 describe("classifyPair", () => {

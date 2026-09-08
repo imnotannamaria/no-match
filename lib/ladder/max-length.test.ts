@@ -12,7 +12,7 @@ describe("checkMaxLength", () => {
 
   it("flags a token over the default limit of 39 bytes", () => {
     // Verified against the real WASM module: this 48-byte ASCII word is
-    // dropped at the default limit and kept at 255. See DECISIONS.md, phase 3.
+    // dropped at the default limit and kept at 255. See docs/DECISIONS.md, phase 3.
     const word = "paralelepipedico".repeat(3);
     const result = checkMaxLength(word, 39);
     expect(result.bytes).toBe(48);

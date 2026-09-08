@@ -1,7 +1,7 @@
 // Turns an explanation into the one change that would bring the document
 // back. The button built on this writes into the other column, never the
 // one being inspected: the tool is a comparison, and the button's job is to
-// build the comparison that proves the fix. See IMPLEMENTATION.md, phase 5.
+// build the comparison that proves the fix. See docs/IMPLEMENTATION.md, phase 5.
 
 import type { AnalysisOptions } from "@/lib/alyze/types";
 import type { DocumentExplanation, FixableOption } from "@/lib/ladder/types";

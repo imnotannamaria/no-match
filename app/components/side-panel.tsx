@@ -190,7 +190,7 @@ function WordLadder({
           : phraseOnlyMiss
             ? "está neste documento. A frase exata é que não fecha."
             : word.kind === "converge" && word.stage
-              ? `só fica igual a "${word.docWord}" depois que o analisador mexe nas duas. ${
+              ? `e "${word.docWord}" são tokens diferentes. ${
                   word.fixableBy.length > 0
                     ? optionAdvice(word.fixableBy[0])
                     : convergeAdvice(word.stage)
@@ -309,7 +309,7 @@ function TokenRow({
                 key={`hole-${slot.position}`}
                 className="min-w-[52px] rounded-md border border-dashed border-[var(--border-strong)] px-2 py-1.5"
               >
-                <span className="block text-[13px] text-[var(--fg-muted)]">—</span>
+                <span className="block text-[13px] text-[var(--fg-muted)]">·</span>
                 <span className="mt-0.5 block text-[10px] text-[var(--fg-muted)]">
                   pos {slot.position}, descartada
                 </span>

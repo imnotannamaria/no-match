@@ -5,7 +5,7 @@
 
 import { DEFAULT_OPTIONS, type AnalysisOptions, type Token } from "@/lib/alyze/types";
 import { DEFAULT_BM25, type BM25Params, type CorpusStats } from "@/lib/bm25/types";
-import type { ExampleDocument } from "@/lib/corpora/example-pt";
+import type { Corpus, ExampleDocument } from "@/lib/corpora";
 
 export type ColumnId = "A" | "B";
 export const COLUMN_IDS: ColumnId[] = ["A", "B"];
@@ -35,18 +35,21 @@ export interface ColumnResult {
 
 /**
  * A opens with the real defaults, everything off, which is the
- * configuration that returns nothing for an accented corpus. B opens with
- * ascii_folding on. The contrast between the two counts is the demo.
+ * configuration that finds almost nothing. B opens with the one option
+ * that brings the missing documents back for this corpus. The contrast
+ * between the two counts is the demo, and it has to be there before
+ * anyone clicks anything.
  */
-export function initialConfigs(): Record<ColumnId, ColumnConfig> {
+export function initialConfigs(corpus: Corpus): Record<ColumnId, ColumnConfig> {
+  const { language } = corpus;
   return {
     A: {
-      options: { ...DEFAULT_OPTIONS, language: "portuguese" },
+      options: { ...DEFAULT_OPTIONS, language },
       phrase: false,
       bm25: { ...DEFAULT_BM25 },
     },
     B: {
-      options: { ...DEFAULT_OPTIONS, language: "portuguese", ascii_folding: true },
+      options: { ...DEFAULT_OPTIONS, language, [corpus.fix]: true },
       phrase: false,
       bm25: { ...DEFAULT_BM25 },
     },

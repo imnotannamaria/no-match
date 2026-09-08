@@ -9,7 +9,7 @@ import { analyzerClient } from "@/lib/alyze/client";
 import type { AnalysisOptions, Token } from "@/lib/alyze/types";
 import { evaluateDocument } from "@/lib/search/match";
 import { explainEmptyQuery } from "@/lib/search/empty-query";
-import { EXAMPLE_CORPUS_PT, type ExampleDocument } from "@/lib/corpora/example-pt";
+import { CORPUS_PT, type Corpus, type ExampleDocument } from "@/lib/corpora";
 import { buildCorpusStats, rank } from "@/lib/bm25/score";
 import { explainDocument, extractRawWords } from "@/lib/ladder/explain";
 import { applyFix, suggestFix, type Fix } from "@/lib/ladder/fix";
@@ -52,10 +52,11 @@ export default function Home() {
   const [ready, setReady] = useState(false);
   const [bootError, setBootError] = useState<string | null>(null);
 
-  const [docs, setDocs] = useState<ExampleDocument[]>(EXAMPLE_CORPUS_PT);
+  const [corpus, setCorpus] = useState<Corpus>(CORPUS_PT);
+  const [docs, setDocs] = useState<ExampleDocument[]>(CORPUS_PT.documents);
   const [corpusOpen, setCorpusOpen] = useState(true);
-  const [query, setQuery] = useState("cafe");
-  const [configs, setConfigs] = useState(initialConfigs);
+  const [query, setQuery] = useState(CORPUS_PT.query);
+  const [configs, setConfigs] = useState(() => initialConfigs(CORPUS_PT));
 
   const [results, setResults] = useState<Record<ColumnId, ColumnResult> | null>(null);
   const [searching, setSearching] = useState(false);
@@ -69,7 +70,14 @@ export default function Home() {
 
   useEffect(() => {
     analyzerClient.ready().then(
-      () => setReady(true),
+      () => {
+        setReady(true);
+        void runSearch({
+          query: CORPUS_PT.query,
+          docs: CORPUS_PT.documents,
+          configs: initialConfigs(CORPUS_PT),
+        });
+      },
       (err: Error) => setBootError(err.message),
     );
   }, []);
@@ -77,6 +85,21 @@ export default function Home() {
   const setConfig = useCallback((id: ColumnId, next: ColumnConfig) => {
     setConfigs((prev) => ({ ...prev, [id]: next }));
   }, []);
+
+  /**
+   * Swapping corpus swaps the search and the language with it. The three
+   * only tell a story together: an English search against a Portuguese
+   * corpus proves nothing.
+   */
+  function pickCorpus(next: Corpus) {
+    setCorpus(next);
+    setDocs(next.documents);
+    setQuery(next.query);
+    const configs = initialConfigs(next);
+    setConfigs(configs);
+    setPanel(null);
+    void runSearch({ query: next.query, docs: next.documents, configs });
+  }
 
   /**
    * Opening the panel is an event, so the work happens here rather than in
@@ -127,7 +150,15 @@ export default function Home() {
     }
   }
 
-  async function search() {
+  /**
+   * Takes what to search rather than reading state, so the opening search
+   * and a corpus swap can run with values React has not committed yet.
+   */
+  async function runSearch(input: {
+    query: string;
+    docs: ExampleDocument[];
+    configs: Record<ColumnId, ColumnConfig>;
+  }) {
     setError(null);
     setSearching(true);
     setPanel(null);
@@ -135,18 +166,18 @@ export default function Home() {
     try {
       const entries = await Promise.all(
         COLUMN_IDS.map(async (id) => {
-          const { options, phrase } = configs[id];
-          const queryTokens = await analyzerClient.analyze(query, options);
+          const { options, phrase } = input.configs[id];
+          const queryTokens = await analyzerClient.analyze(input.query, options);
 
           const analyzed = await Promise.all(
-            docs.map(async (doc) => {
+            input.docs.map(async (doc) => {
               const tokens = await analyzerClient.analyze(doc.text, options);
               return { doc, tokens };
             }),
           );
 
           const emptyQueryNote =
-            queryTokens.length === 0 ? await explainEmptyQuery(query, options) : null;
+            queryTokens.length === 0 ? await explainEmptyQuery(input.query, options) : null;
 
           const columnResults = analyzed.map(({ doc, tokens }) => {
             const verdict =
@@ -170,6 +201,8 @@ export default function Home() {
       setSearching(false);
     }
   }
+
+  const search = () => runSearch({ query, docs, configs });
 
   // Ranking depends on analyzed tokens and parameters only. Moving k1, b or
   // k3 re-runs this and touches no worker.
@@ -272,6 +305,8 @@ export default function Home() {
       <div className="mt-5 flex flex-col items-stretch gap-4 lg:flex-row lg:items-start">
         <CorpusPanel
           docs={docs}
+          corpusId={corpus.id}
+          onPickCorpus={pickCorpus}
           open={corpusOpen}
           onToggleOpen={() => setCorpusOpen((v) => !v)}
           onChangeDoc={(id, text) =>

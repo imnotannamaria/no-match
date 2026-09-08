@@ -1,9 +1,11 @@
 "use client";
 
-import type { ExampleDocument } from "@/lib/corpora/example-pt";
+import { CORPORA, type Corpus, type ExampleDocument } from "@/lib/corpora";
 
 interface CorpusPanelProps {
   docs: ExampleDocument[];
+  corpusId: string;
+  onPickCorpus: (corpus: Corpus) => void;
   open: boolean;
   onToggleOpen: () => void;
   onChangeDoc: (id: string, text: string) => void;
@@ -13,6 +15,8 @@ interface CorpusPanelProps {
 
 export function CorpusPanel({
   docs,
+  corpusId,
+  onPickCorpus,
   open,
   onToggleOpen,
   onChangeDoc,
@@ -52,6 +56,24 @@ export function CorpusPanel({
           recolher ←
         </button>
       </header>
+
+      <div className="mb-3.5 flex gap-1.5">
+        {CORPORA.map((corpus) => (
+          <button
+            key={corpus.id}
+            type="button"
+            aria-pressed={corpus.id === corpusId}
+            onClick={() => onPickCorpus(corpus)}
+            className={`flex-1 rounded-md border px-2 py-1.5 text-[11px] ${
+              corpus.id === corpusId
+                ? "border-[var(--fg-brand)] bg-[var(--bg-surface-brand)] text-[var(--fg-primary)]"
+                : "border-[var(--border-subtle)] text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
+            }`}
+          >
+            {corpus.label}
+          </button>
+        ))}
+      </div>
 
       <div className="flex flex-col gap-2.5">
         {docs.map((d) => (

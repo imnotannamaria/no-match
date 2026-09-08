@@ -2,7 +2,7 @@
 
 Six phases. Each one ends with something that works. No phase starts with the previous one broken.
 
-This file is the checklist. `DECISIONS.md` is the record of what was chosen and why. `CLAUDE.md` is the standing rules every phase is checked against.
+This file is the checklist. `DECISIONS.md` is the record of what was chosen and why. `../CLAUDE.md` is the standing rules every phase is checked against.
 
 The diagrams behind these phases are in [public/board.png](public/board.png): what the tool is and how a request travels from the interface to the WASM module, what recalculates when, and the states the screen can be in.
 
@@ -13,7 +13,7 @@ The diagrams behind these phases are in [public/board.png](public/board.png): wh
 | 3 | The stage ladder | Done |
 | 4 | BM25 and ranking | Done |
 | 5 | A against B | Done |
-| 6 | Corpora and polish | Not started |
+| 6 | Corpora and polish | Done |
 
 ---
 
@@ -128,11 +128,11 @@ This is a comparison tool. The button's job is to build the comparison that prov
 
 Example corpora in Portuguese and English, the opening state, and the writing pass.
 
-- [ ] The page opens with a corpus loaded, a search already typed, and the two columns already configured to show the problem
-- [ ] Someone opens the URL, reads nothing, and understands the problem inside 30 seconds
-- [ ] Every string has been through the writing rules: short sentences, no filler, concrete example before the technical term
-- [ ] The README's first section is accurate: no turbopuffer account, no network call to their product, `alyze` is theirs from a named commit, the BM25 is mine
-- [ ] Nothing anywhere claims parity with production behaviour
-- [ ] Every claim in the README is one I verified
+- [x] The page opens with a corpus loaded, a search already typed, and the two columns already configured to show the problem
+- [x] Someone opens the URL, reads nothing, and understands the problem inside 30 seconds
+- [x] Every string has been through the writing rules: short sentences, no filler, concrete example before the technical term
+- [x] The README's first section is accurate: no turbopuffer account, no network call to their product, `alyze` is theirs from a named commit, the BM25 is mine
+- [x] Nothing anywhere claims parity with production behaviour
+- [x] Every claim in the README is one I verified
 
 **Done when:** it explains itself with no narration. If it needs a sentence from you to land, it is not done.

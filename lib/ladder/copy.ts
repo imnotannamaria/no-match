@@ -67,7 +67,7 @@ export function convergeAdvice(stage: StageId): string {
 /** What to say when a filter ate the document's copy of the word. */
 export function disappearedAdvice(stage: StageId, word: string): string {
   const { option, does } = STAGE_COPY[stage];
-  return `o documento tem essa palavra, mas ${option} ${does}, e "${word}" é uma delas. Desligue ${option} para achar este documento.`;
+  return `o documento tem exatamente essa palavra. Só que ${option} ${does}, e "${word}" é uma delas. Desligue ${option} para achar este documento.`;
 }
 
 /** Names the option that actually fixes the pair, and what it does. */

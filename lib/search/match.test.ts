@@ -49,7 +49,7 @@ describe("phraseMatch", () => {
 
   it("does not match when a real word sits between the query's words in the document", () => {
     // Doc keeps "da" (stopwords off). Query was typed without it, so its
-    // own tokens are adjacent — but that's not the same phrase.
+    // own tokens are adjacent, but that is not the same phrase.
     const doc = [tok("café", 0), tok("da", 1), tok("manhã", 2)];
     const query = [tok("café", 0), tok("manhã", 1)];
     expect(phraseMatch(query, doc).matched).toBe(false);
