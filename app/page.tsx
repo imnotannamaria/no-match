@@ -4,13 +4,15 @@
 // stage killed the match, per query word. Still plain -- no design system
 // yet, that's phase 6.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { analyzerClient } from "@/lib/alyze/client";
 import { sanitizeOptions, canEnableCaseSensitive } from "@/lib/alyze/validate";
 import { DEFAULT_OPTIONS, type AnalysisOptions, type Token } from "@/lib/alyze/types";
 import { evaluateDocument } from "@/lib/search/match";
 import { explainEmptyQuery } from "@/lib/search/empty-query";
 import { EXAMPLE_CORPUS_PT, type ExampleDocument } from "@/lib/corpora/example-pt";
+import { buildCorpusStats, rank } from "@/lib/bm25/score";
+import { DEFAULT_BM25, type BM25Params, type CorpusStats } from "@/lib/bm25/types";
 import { explainDocument, extractRawWords } from "@/lib/ladder/explain";
 import { checkMaxLength } from "@/lib/ladder/max-length";
 import {
@@ -26,9 +28,17 @@ import type { DocumentExplanation, LadderExplanation } from "@/lib/ladder/types"
 
 interface DocResult {
   doc: ExampleDocument;
+  /** Kept so ranking can re-run without going back to the analyzer. */
+  tokens: Token[];
   matched: boolean;
   matchedTerms: string[];
   phraseOnlyMiss: boolean;
+}
+
+interface SearchState {
+  queryTokens: Token[];
+  results: DocResult[];
+  stats: CorpusStats;
 }
 
 export default function Home() {
@@ -38,7 +48,8 @@ export default function Home() {
   const [query, setQuery] = useState("cafe");
   const [options, setOptions] = useState<AnalysisOptions>(DEFAULT_OPTIONS);
   const [phrase, setPhrase] = useState(false);
-  const [results, setResults] = useState<DocResult[] | null>(null);
+  const [lastSearch, setLastSearch] = useState<SearchState | null>(null);
+  const [bm25, setBm25] = useState<BM25Params>(DEFAULT_BM25);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [emptyQueryNote, setEmptyQueryNote] = useState<string | null>(null);
@@ -81,29 +92,45 @@ export default function Home() {
       if (queryTokens.length === 0) {
         const note = await explainEmptyQuery(query, options);
         setEmptyQueryNote(note);
-        setResults(null);
+        setLastSearch(null);
         return;
       }
 
-      const docResults = await Promise.all(
+      const results = await Promise.all(
         docs.map(async (doc) => {
-          const docTokens = await analyzerClient.analyze(doc.text, options);
-          const verdict = evaluateDocument(queryTokens, docTokens, { phrase });
-          return { doc, ...verdict };
+          const tokens = await analyzerClient.analyze(doc.text, options);
+          const verdict = evaluateDocument(queryTokens, tokens, { phrase });
+          return { doc, tokens, ...verdict };
         }),
       );
-      setResults(docResults);
+
+      // Document frequency and average length are corpus-wide, so they are
+      // built from every document, not only the ones that matched.
+      const stats = buildCorpusStats(results.map((r) => r.tokens));
+      setLastSearch({ queryTokens, results, stats });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
-      setResults(null);
+      setLastSearch(null);
     } finally {
       setSearching(false);
     }
   }
 
   const caseSensitiveAllowed = canEnableCaseSensitive(options);
-  const matched = results?.filter((r) => r.matched) ?? [];
-  const absent = results?.filter((r) => !r.matched) ?? [];
+  const absent = lastSearch?.results.filter((r) => !r.matched) ?? [];
+
+  // Ranking depends on the analyzed tokens and the parameters, nothing
+  // else. Moving k1, b or k3 re-runs this and touches no worker.
+  const ranked = useMemo(() => {
+    if (!lastSearch) return [];
+    const matched = lastSearch.results.filter((r) => r.matched);
+    return rank(
+      matched.map((r) => ({ item: r, tokens: r.tokens })),
+      lastSearch.queryTokens,
+      lastSearch.stats,
+      bm25,
+    );
+  }, [lastSearch, bm25]);
 
   return (
     <main style={{ padding: 24, fontFamily: "monospace", maxWidth: 960 }}>
@@ -181,6 +208,33 @@ export default function Home() {
       </section>
 
       <section style={{ marginBottom: 16 }}>
+        <h2 style={{ fontSize: 14 }}>ordenação (BM25)</h2>
+        <p style={{ fontSize: 12, color: "#555", margin: "0 0 6px" }}>
+          Mexer aqui muda só a ordem dos resultados. Nada é analisado de novo.
+        </p>
+        {(
+          [
+            ["k1", "quão rápido repetir a palavra para de ajudar", 0.1],
+            ["b", "quanto um documento longo é penalizado", 0.05],
+            ["k3", "quanto pesa repetir a palavra na busca", 0.5],
+          ] as const
+        ).map(([key, help, step]) => (
+          <label key={key} style={{ display: "block" }}>
+            {key}:{" "}
+            <input
+              type="number"
+              value={bm25[key]}
+              min={0}
+              step={step}
+              onChange={(e) => setBm25((prev) => ({ ...prev, [key]: Number(e.target.value) }))}
+              style={{ width: 70 }}
+            />{" "}
+            <span style={{ fontSize: 12, color: "#555" }}>{help}</span>
+          </label>
+        ))}
+      </section>
+
+      <section style={{ marginBottom: 16 }}>
         <h2 style={{ fontSize: 14 }}>search</h2>
         <input
           value={query}
@@ -219,17 +273,19 @@ export default function Home() {
         ))}
       </section>
 
-      {results && (
+      {lastSearch && (
         <section>
-          <h2 style={{ fontSize: 14 }}>resultados · {matched.length}</h2>
-          <ul>
-            {matched.map((r) => (
-              <li key={r.doc.id}>
-                <strong>{r.doc.id}</strong>: {r.doc.text}{" "}
-                <span style={{ color: "#666" }}>[{r.matchedTerms.join(", ")}]</span>
+          <h2 style={{ fontSize: 14 }}>resultados · {ranked.length}</h2>
+          <ol>
+            {ranked.map(({ item, score }) => (
+              <li key={item.doc.id}>
+                <strong>{item.doc.id}</strong>: {item.doc.text}{" "}
+                <span style={{ color: "#666" }}>
+                  [{item.matchedTerms.join(", ")}] score {score.toFixed(3)}
+                </span>
               </li>
             ))}
-          </ul>
+          </ol>
 
           <h2 style={{ fontSize: 14 }}>ausentes · {absent.length}</h2>
           {absent.map((r) => (

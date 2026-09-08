@@ -97,3 +97,31 @@ The panel then leads with the phrase explanation and still shows the per-word ta
 ### max_token_length stays separate
 
 `lib/ladder/max-length.ts` checks byte length against the active `max_token_length` independently of the ladder classification, and the UI shows it alongside a `never` verdict rather than instead of it. A document can simultaneously have "no word here is even close" and, separately, a search term too long to ever become a token. Verified with a 48-byte all-ASCII word against the default 39-byte limit.
+
+## Phase 4
+
+### IDF: the smoothed form, the same shape Lucene uses
+
+`ln(1 + (N - n + 0.5) / (n + 0.5))`.
+
+The classic textbook form puts the 1 outside the log, and goes negative as soon as a term appears in more than half the documents. This tool runs on corpora of five sentences someone pasted in, where that is not an edge case, it is Tuesday. A negative score rendered next to a result costs more trust than the extra precision could ever buy, and explaining it would take a paragraph the interface does not have.
+
+The form above keeps the argument above 1 for any `n` between 0 and `N`, so the result is always positive. Pinned by a test on a corpus where every document contains the term.
+
+### Document length is the tokens that survived analysis
+
+Not the positions spent, which include the holes left by filtered tokens.
+
+A document is not longer, in any sense that matters to ranking, because it happened to contain stopwords that were removed before indexing. The tokens that survived are the ones that can be matched, so they are the ones that should decide the length penalty. Counting the holes would penalize a document for words that were deliberately excluded.
+
+The holes still matter, and still exist: phrase matching reads them, and the token view renders them. They just do not feed `avgdl`.
+
+### Ranking is separated from analysis by construction, not by discipline
+
+`lib/bm25/score.ts` takes analyzed tokens and parameters. No analyzer, no worker, no corpus text. The page holds the analyzed tokens in state after a search and recomputes the order with `useMemo` over `[lastSearch, bm25]`, so `k1`, `b` and `k3` cannot reach the worker even by accident.
+
+Measured in the browser by counting `Worker.prototype.postMessage`: a search over the four example documents costs 5 calls, one for the query and one per document. Moving a ranking parameter afterwards costs 0, and the order changes on screen. With `b` at 0 a long document holding the term twice outranks a short one holding it once; at 0.75 and 1 the short one wins. The numbers match a calculation worked out by hand before the code existed, kept in `lib/bm25/score.test.ts`.
+
+### Scores are shown to three decimals
+
+Enough to separate two close documents in a small corpus, short enough for the narrow column the design reserves for it.

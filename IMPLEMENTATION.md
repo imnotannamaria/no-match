@@ -11,7 +11,7 @@ The diagrams behind these phases are in [public/board.png](public/board.png): wh
 | 1 | WASM in the worker, analyzing one sentence | Done |
 | 2 | Corpus, search, matched or did not match | Done |
 | 3 | The stage ladder | Done |
-| 4 | BM25 and ranking | Not started |
+| 4 | BM25 and ranking | Done |
 | 5 | A against B | Not started |
 | 6 | Corpora and polish | Not started |
 
@@ -90,13 +90,13 @@ Score the matched set and order it. The set is already decided by phase 2; this 
 
 The board's middle panel is the check that matters here: tokenize and analyse depend on the text and the language, building the index depends on the same, matching depends on the query, and scoring depends on `k1`, `b` and the query. Nothing above the last row may re-run when only a ranking parameter moves.
 
-- [ ] `k1` = `1.2`, `b` = `0.75`, `k3` = `8.0` as defaults, matching the documented turbopuffer parameters
-- [ ] Scores match a calculation done by hand on a corpus of three documents, and that calculation is in the test
-- [ ] Moving `k1`, `b` or `k3` reorders the list immediately and triggers zero analysis calls
-- [ ] IDF never renders a negative score on screen, on a small corpus where the classic formula would go negative
-- [ ] The IDF variant chosen and the document-length definition are both written into `DECISIONS.md` with the reasoning
-- [ ] The implementation is short enough to read out loud and defend
-- [ ] The README says plainly that this BM25 is written here and is not turbopuffer's code
+- [x] `k1` = `1.2`, `b` = `0.75`, `k3` = `8.0` as defaults, matching the documented turbopuffer parameters
+- [x] Scores match a calculation done by hand on a corpus of three documents, and that calculation is in the test
+- [x] Moving `k1`, `b` or `k3` reorders the list immediately and triggers zero analysis calls
+- [x] IDF never renders a negative score on screen, on a small corpus where the classic formula would go negative
+- [x] The IDF variant chosen and the document-length definition are both written into `DECISIONS.md` with the reasoning
+- [x] The implementation is short enough to read out loud and defend
+- [x] The README says plainly that this BM25 is written here and is not turbopuffer's code
 
 **Done when:** the order reacts to the sliders immediately, the numbers are defensible by hand, and nothing re-analyzes when only a ranking parameter moved.
 
@@ -116,7 +116,9 @@ Two columns, independent configurations, the side panel, the fix button, the sch
 - [ ] Reasoned about 375px: the columns stack, the corpus panel collapses, the panel goes full width
 - [ ] Every row with two children and `justify-between` has a stated answer for what happens when they stop fitting
 
-Open question for this phase: the fix button turns an option on, but in which column? Turning it on where the reader opened the panel is direct, and destroys the side that was acting as the control. Always turning it on in B keeps the contrast that carries the demo, and reads oddly when the panel was opened from A.
+The fix button writes into the **other** column. It copies the configuration of the column the panel was opened from, turns on the option that fixes the miss, and puts the result on the opposite side. The column being inspected is never mutated, so the `0` that showed the problem stays on screen next to the `1` that proves the fix. The button names its destination, so nothing moves by surprise.
+
+This is a comparison tool. The button's job is to build the comparison that proves the fix, not to change the thing you were looking at.
 
 **Done when:** two configurations sit side by side, the contrast between them tells the story, and the fix button closes the loop.
 
