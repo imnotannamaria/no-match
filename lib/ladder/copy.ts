@@ -18,32 +18,32 @@ interface StageCopy {
 export const STAGE_COPY: Record<StageId, StageCopy> = {
   S0: {
     option: "",
-    does: "só quebra o texto em palavras, sem mudar nenhuma delas",
+    does: "only cuts the text into words, without changing any of them",
   },
   S1: {
     option: "case_sensitive: false",
-    does: "deixa tudo minúsculo, então Café e café viram a mesma palavra",
+    does: "lowercases everything, so Café and café become the same word",
   },
   S2: {
     option: "remove_stopwords",
-    does: "descarta palavras muito comuns, como de, da, o",
+    does: "drops very common words, like the, of and a",
   },
   S3: {
     option: "stemming",
-    does: "corta a palavra até a raiz, então correr e correu viram corr",
+    does: "cuts a word back to its root, so cafes becomes cafe",
   },
   S4: {
     option: "ascii_folding",
-    does: "troca letra acentuada pela sem acento, então café vira cafe",
+    does: "swaps an accented letter for the plain one, so café becomes cafe",
   },
 };
 
 export const VERDICT_COPY: Record<LadderVerdict, string> = {
-  match: "iguais",
-  "no-match": "diferentes",
-  "doc-dropped": "o documento perdeu a palavra aqui",
-  "query-dropped": "a busca perdeu a palavra aqui",
-  "both-dropped": "os dois perderam a palavra aqui",
+  match: "same",
+  "no-match": "different",
+  "doc-dropped": "the document lost the word here",
+  "query-dropped": "the search lost the word here",
+  "both-dropped": "both lost the word here",
 };
 
 /** "S4 · ascii_folding", or just "S0" when the stage turns nothing on. */
@@ -56,61 +56,65 @@ export function stageLabel(stage: StageId): string {
 export function convergeAdvice(stage: StageId): string {
   const { option, does } = STAGE_COPY[stage];
   if (!option) {
-    return "as duas palavras já são iguais sem ligar nada. Se o documento não voltou, o motivo não está nesta palavra.";
+    return "these two are already the same word with nothing turned on. If the document is still missing, this word is not the reason.";
   }
   if (stage === "S1") {
-    return `só a caixa das letras difere, e ${option} já é o padrão. Se o documento não voltou, o motivo não está nesta palavra.`;
+    return `only the letter case differs, and ${option} is already the default. If the document is still missing, this word is not the reason.`;
   }
-  return `Ligue ${option}, que ${does}.`;
+  return `Turn on ${option}, which ${does}.`;
 }
 
 /** What to say when a filter ate the document's copy of the word. */
 export function disappearedAdvice(stage: StageId, word: string): string {
   const { option, does } = STAGE_COPY[stage];
-  return `o documento tem exatamente essa palavra. Só que ${option} ${does}, e "${word}" é uma delas. Desligue ${option} para achar este documento.`;
+  return `the document has exactly that word. Then ${option} ${does}, and it threw "${word}" away. Turn ${option} off to find this document.`;
 }
 
 /** Names the option that actually fixes the pair, and what it does. */
 export function optionAdvice(option: "ascii_folding" | "stemming"): string {
   const stage = option === "ascii_folding" ? "S4" : "S3";
-  return `Ligue ${option}, que ${STAGE_COPY[stage].does}.`;
+  return `Turn on ${option}, which ${STAGE_COPY[stage].does}.`;
 }
 
 export const NEVER_ADVICE =
-  "nenhuma palavra deste documento vira igual a essa, em nenhum estágio. Não é configuração: são palavras diferentes mesmo.";
+  "no word in this document ever becomes the same as that one, at any stage. This is not a setting: they are different words.";
 
 /** The word never entered the search, so no document could ever match on it. */
-export function droppedFromQueryAdvice(reason: "stopword" | "length", bytes: number, limit: number): string {
+export function droppedFromQueryAdvice(
+  reason: "stopword" | "length",
+  bytes: number,
+  limit: number,
+): string {
   if (reason === "length") {
-    return `essa palavra tem ${bytes} bytes, acima do limite de ${limit}, então ela foi descartada da sua busca antes de comparar com qualquer documento.`;
+    return `that word is ${bytes} bytes, over the limit of ${limit}, so it was dropped from your search before any document was compared.`;
   }
-  return "essa palavra é comum demais e remove_stopwords descartou ela da sua própria busca, antes de comparar com qualquer documento. Nenhum documento poderia bater por ela.";
+  return "that word is too common, and remove_stopwords dropped it from your own search, before any document was compared. No document could have matched on it.";
 }
 
 export const PHRASE_ONLY_MISS =
-  "todas as palavras da busca estão neste documento, mas não uma do lado da outra. Nenhum estágio da análise tirou ele: foi a frase exata. Desligue frase exata para trazer este documento de volta.";
+  "every word in the search is in this document, just not next to each other. No analysis stage removed it: exact phrase did. Turn exact phrase off to bring this document back.";
 
 /** The toggles, in the order the cascade applies them. */
 export const OPTION_COPY: {
   key: "case_sensitive" | "remove_stopwords" | "stemming" | "ascii_folding";
   help: string;
 }[] = [
-  { key: "case_sensitive", help: "diferencia maiúscula de minúscula" },
-  { key: "remove_stopwords", help: "descarta palavras muito comuns, como de, da, o" },
-  { key: "stemming", help: "corta a palavra até a raiz, correr e correu viram corr" },
-  { key: "ascii_folding", help: "tira o acento, café vira cafe" },
+  { key: "case_sensitive", help: "tells Café from café" },
+  { key: "remove_stopwords", help: "drops very common words, like the, of and a" },
+  { key: "stemming", help: "cuts a word to its root, cafes becomes cafe" },
+  { key: "ascii_folding", help: "drops the accent, café becomes cafe" },
 ];
 
 /** What the fix button says, naming both the change and where it lands. */
 export function fixLabel(fix: Fix, target: string): string {
   switch (fix.kind) {
     case "enable":
-      return `ligar ${fix.option} na coluna ${target}`;
+      return `turn on ${fix.option} in column ${target}`;
     case "disable":
-      return `desligar ${fix.option} na coluna ${target}`;
+      return `turn off ${fix.option} in column ${target}`;
     case "disable-phrase":
-      return `desligar frase exata na coluna ${target}`;
+      return `turn off exact phrase in column ${target}`;
     case "raise-max-token-length":
-      return `subir max_token_length para ${fix.to} na coluna ${target}`;
+      return `raise max_token_length to ${fix.to} in column ${target}`;
   }
 }

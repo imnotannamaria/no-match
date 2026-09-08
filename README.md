@@ -86,7 +86,9 @@ npm run dev
 
 Open http://localhost:3000. It opens with the Portuguese corpus and the search `cafe`. Column A is the real defaults, with everything off, and finds one document. Column B has `ascii_folding` on and finds three. The two missing documents spell `café` with the accent.
 
-Click any document under `ausentes` to see which stage of the pipeline removed it, and a button that applies the fix to the other column so you can read both side by side.
+Click any document under `missing` to see which stage of the pipeline removed it, and a button that applies the fix to the other column so you can read both side by side.
+
+The interface is in English. The Portuguese is in the corpus, which is where the problem lives.
 
 The English corpus fails for a different reason, which is the point of having it: English has no accents, so the same problem is close to invisible. What breaks there is a plural. `cafes` does not find `cafe` until stemming is on.
 

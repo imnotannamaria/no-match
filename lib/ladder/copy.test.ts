@@ -31,11 +31,11 @@ describe("stage copy", () => {
   it("does not tell anyone to turn on something already on by default", () => {
     // S1 is case_sensitive: false, which is the default. Telling someone to
     // enable it is a dead end, so the advice has to say something else.
-    expect(convergeAdvice("S1")).toContain("já é o padrão");
+    expect(convergeAdvice("S1")).toContain("already the default");
   });
 
   it("does not tell anyone to turn on an option at S0, where there is none", () => {
-    expect(convergeAdvice("S0")).not.toContain("ligue");
+    expect(convergeAdvice("S0")).not.toMatch(/turn on/i);
   });
 
   it("labels a stage with its option so no bare id reaches a person", () => {

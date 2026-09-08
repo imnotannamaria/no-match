@@ -189,3 +189,43 @@ This does not weaken the rule that the ladder never runs on a keystroke. It runs
 ### The README now describes a tool that exists
 
 It said "nothing works yet", which stopped being true at phase 1 and would have been the first thing a reader saw. Every claim in it was re-checked against the running app. The one worth testing rather than asserting is that nothing leaves the browser: loading the page, running a search on text typed into it, and opening an explanation produces 25 requests, all to localhost, and zero to anywhere else.
+
+## The interface is in English, and the corpus is not
+
+The interface used to be in Portuguese, on the reasoning that the failure it demonstrates is a Portuguese failure. That reasoning was about the corpus, and it got applied to the wrong layer.
+
+The corpus is where the language matters: `cafe` failing to find `café` needs an accented language to exist at all, and swapping the corpus to English swaps the failure to plurals rather than removing it. The chrome around it, the toggles, the stage explanations, the counts, is read by people deciding whether the tool taught them anything, and most of them do not read Portuguese. `<html lang>` was already `en`, and so were the docs, the code and the commits. The interface was the only thing arguing.
+
+So: interface, docs, code and commits in English. Corpus in Portuguese and English, and the language picker stays.
+
+## A toggle re-runs its column, typing still does not
+
+The rule was that nothing runs without the search button. Under it, flipping `ascii_folding` changed the toggle and left the count from the previous configuration sitting above it, so the number on screen described a configuration that was no longer set. That is worse than slow.
+
+The rule was about keystrokes: running the analyzer per character, or worse the ladder, is what it exists to prevent. A toggle is a single discrete choice, and re-running one column costs one analyze call per document plus one for the query, five calls on the example corpus. Measured against the thing it buys, which is watching `1` become `3` as you click, that is not a trade.
+
+Typed text still waits for the button. Corpus edits still wait for the button, and the corpus header now says so when the two have drifted apart.
+
+The re-run uses the query and documents the **last search committed to**, not what is currently in the boxes. Otherwise a half-typed document would reach column B and not column A, and the comparison would be between two different corpora.
+
+## Motion is CSS, and Radix owns the states that are hard
+
+`transform` and `opacity` only, declared as keyframes in `app/globals.css`, with the reduced-motion block collapsing every one of them. No animation library.
+
+The exception is enter and exit on the dialog and the dropdown, where the hard part is not the animation but keeping an element mounted while it leaves. Radix already tracks that as `data-state`, and entrepta's components are written against `tw-animate-css`, which is a stylesheet, not a runtime. Rewriting those class lists by hand would have meant diverging from the design system source to save a dependency that ships no JavaScript.
+
+Three dependencies added, all of them the design system's own primitives: `@radix-ui/react-dialog`, `@radix-ui/react-dropdown-menu`, `tw-animate-css`.
+
+## The side panel became a dialog
+
+It used to be an aside pinned to the right edge, with no focus trap, no escape key, and a live page behind it. The panel exists to answer one question about one document under one configuration, and the page behind it had toggles that would rewrite the configuration under the reader while they read.
+
+It is now the same entrepta dialog with a `drawer` variant: anchored right instead of centred, same focus trap, same escape, same overlay. The fix button applies the change and closes the drawer, because the point of the fix is seeing both counts next to each other, which cannot happen while a panel covers one of them.
+
+## Fonts moved to next/font
+
+`globals.css` opened with an `@import` from Google Fonts for three families. A CSS `@import` is discovered only after the stylesheet parses, and it blocks rendering. They are now loaded through `next/font`, self-hosted and preloaded, and Tailwind's `font-serif` and `font-mono` utilities were pointed at the same tokens through `@theme`.
+
+That last part fixed a quiet bug: `font-serif` in a component was resolving to Tailwind's default Georgia stack, not Newsreader. The counts and titles had never rendered in the project's own serif.
+
+Verified after the change: loading the page, running a search and opening an explanation makes zero requests to any host but `localhost`.

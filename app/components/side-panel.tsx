@@ -3,6 +3,11 @@
 // The panel that answers the question the tool exists for. Two tabs: the
 // ladder, which says which stage killed the match, and the tokens, which
 // shows what the analyzer actually produced, holes included.
+//
+// It is a dialog, not a floating aside: focus goes into it, escape closes
+// it, and the page behind it stops taking clicks. Reading an explanation
+// while the thing it explains changes underneath is the one interaction
+// this panel must not allow.
 
 import { useState } from "react";
 import type { Token } from "@/lib/alyze/types";
@@ -22,6 +27,9 @@ import {
 import type { Fix } from "@/lib/ladder/fix";
 import { withHoles } from "@/lib/tokens/positions";
 import type { ColumnId } from "@/lib/columns";
+import { Button } from "@/app/components/entrepta/button";
+import { Dialog, DialogContent, DialogLabel, DialogTitle } from "@/app/components/entrepta/dialog";
+import { Tabs, TabsList, TabsTrigger } from "@/app/components/entrepta/tabs";
 
 interface SidePanelProps {
   columnId: ColumnId;
@@ -41,79 +49,65 @@ interface SidePanelProps {
 }
 
 export function SidePanel(props: SidePanelProps) {
-  const [tab, setTab] = useState<"ladder" | "tokens">("ladder");
+  const [tab, setTab] = useState("ladder");
 
   return (
-    <aside
-      aria-label={`por que ${props.docId} não bateu na coluna ${props.columnId}`}
-      className="fixed inset-y-0 right-0 bottom-7 z-40 flex w-full max-w-full flex-col border-l border-[var(--border-strong)] bg-[var(--bg-surface)] shadow-2xl sm:w-[560px] sm:max-w-[92vw]"
-    >
-      <header className="flex items-start justify-between gap-3 border-b border-[var(--border-subtle)] px-4 py-3">
-        <div className="min-w-0">
-          <p className="text-[11px] uppercase tracking-[0.08em] text-[var(--fg-muted)]">
-            ◆ coluna {props.columnId} · {props.docId}
-          </p>
-          <p className="mt-0.5 truncate font-serif text-xl text-[var(--fg-primary)]">
-            {props.docText}
-          </p>
+    <Dialog open onOpenChange={(next) => !next && props.onClose()}>
+      <DialogContent
+        variant="drawer"
+        aria-describedby={undefined}
+        className="gap-0"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+      >
+        <header className="border-b border-[var(--border-subtle)] px-5 py-4 pr-12">
+          <DialogLabel>
+            column {props.columnId} · {props.docId}
+          </DialogLabel>
+          <DialogTitle className="mt-1.5 text-xl">{props.docText}</DialogTitle>
+        </header>
+
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList>
+            <TabsTrigger value="ladder">ladder</TabsTrigger>
+            <TabsTrigger value="tokens">tokens</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        <div className="flex-1 overflow-auto overscroll-contain px-5 py-5">
+          {props.loading && (
+            <p role="status" className="font-mono text-[12px] text-[var(--fg-secondary)]">
+              analysing…
+            </p>
+          )}
+
+          {props.error && (
+            <p role="alert" className="font-mono text-[12px] text-[var(--status-error-fg)]">
+              could not analyse this document: {props.error}
+            </p>
+          )}
+
+          {!props.loading && !props.error && props.explanation && tab === "ladder" && (
+            <LadderTab
+              explanation={props.explanation}
+              maxTokenLength={props.maxTokenLength}
+              fix={props.fix}
+              targetColumnId={props.targetColumnId}
+              onApplyFix={props.onApplyFix}
+            />
+          )}
+
+          {!props.loading && !props.error && tab === "tokens" && (
+            <TokensTab
+              queryRaw={props.queryRaw}
+              queryTokens={props.queryTokens}
+              docId={props.docId}
+              docTokens={props.docTokens}
+              maxTokenLength={props.maxTokenLength}
+            />
+          )}
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {(["ladder", "tokens"] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              aria-pressed={tab === t}
-              onClick={() => setTab(t)}
-              className={`rounded-md border px-2.5 py-1 text-[11px] ${
-                tab === t
-                  ? "border-[var(--fg-brand)] bg-[var(--bg-surface-brand)] text-[var(--fg-primary)]"
-                  : "border-[var(--border-subtle)] text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
-              }`}
-            >
-              {t === "ladder" ? "escada" : "tokens"}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={props.onClose}
-            aria-label="fechar painel"
-            className="px-1.5 py-1 text-sm text-[var(--fg-muted)] hover:text-[var(--fg-primary)]"
-          >
-            ×
-          </button>
-        </div>
-      </header>
-
-      <div className="flex-1 overflow-auto p-4">
-        {props.loading && <p className="text-xs text-[var(--fg-secondary)]">analisando…</p>}
-
-        {props.error && (
-          <p role="alert" className="text-xs text-[var(--status-error-fg)]">
-            não deu para analisar: {props.error}
-          </p>
-        )}
-
-        {!props.loading && !props.error && props.explanation && tab === "ladder" && (
-          <LadderTab
-            explanation={props.explanation}
-            maxTokenLength={props.maxTokenLength}
-            fix={props.fix}
-            targetColumnId={props.targetColumnId}
-            onApplyFix={props.onApplyFix}
-          />
-        )}
-
-        {!props.loading && !props.error && tab === "tokens" && (
-          <TokensTab
-            queryRaw={props.queryRaw}
-            queryTokens={props.queryTokens}
-            docId={props.docId}
-            docTokens={props.docTokens}
-            maxTokenLength={props.maxTokenLength}
-          />
-        )}
-      </div>
-    </aside>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -133,7 +127,7 @@ function LadderTab({
   return (
     <div>
       {explanation.phraseOnlyMiss && (
-        <p className="mb-4 rounded-lg border border-[var(--fg-brand)] bg-[var(--bg-surface-brand)] p-3 text-xs leading-relaxed text-[var(--fg-primary)]">
+        <p className="mb-5 rounded-[var(--radius-md)] border border-[var(--fg-brand)] bg-[var(--bg-surface-brand)] p-3 font-sans text-[12.5px] leading-relaxed text-[var(--fg-primary)]">
           {PHRASE_ONLY_MISS}
         </p>
       )}
@@ -148,19 +142,15 @@ function LadderTab({
       ))}
 
       {fix && (
-        <button
-          type="button"
-          onClick={onApplyFix}
-          className="mt-3 rounded-lg border border-[var(--fg-brand)] bg-[var(--fg-brand)] px-3.5 py-2 text-xs text-[var(--bg-canvas)] hover:bg-[var(--fg-brand-hover)]"
-        >
-          {fixLabel(fix, targetColumnId)}
-        </button>
-      )}
-      {fix && (
-        <p className="mt-2 text-[11px] leading-snug text-[var(--fg-muted)]">
-          A coluna que você está olhando não muda. O conserto vai para a outra, para você ver as
-          duas lado a lado.
-        </p>
+        <div className="mt-5 border-t border-[var(--border-subtle)] pt-4">
+          <Button variant="primary" size="sm" onClick={onApplyFix}>
+            {fixLabel(fix, targetColumnId)}
+          </Button>
+          <p className="mt-2 font-sans text-[11.5px] leading-snug text-[var(--fg-muted)]">
+            The column you are reading does not change. The fix lands on the other one, so you can
+            see both at once.
+          </p>
+        </div>
       )}
     </div>
   );
@@ -178,9 +168,11 @@ function WordLadder({
   const length = checkMaxLength(word.queryWord, maxTokenLength);
 
   return (
-    <section className="mb-4">
-      <p className="text-xs leading-relaxed text-[var(--fg-primary)]">
-        <strong className="text-[var(--fg-brand)]">&quot;{word.queryWord}&quot;</strong>{" "}
+    <section className="mb-6">
+      <p className="font-sans text-[13px] leading-relaxed text-[var(--fg-primary)]">
+        <strong className="font-mono font-normal text-[var(--fg-brand-hover)]">
+          &quot;{word.queryWord}&quot;
+        </strong>{" "}
         {word.droppedFromQuery
           ? droppedFromQueryAdvice(
               word.droppedFromQuery.reason,
@@ -188,9 +180,9 @@ function WordLadder({
               maxTokenLength,
             )
           : phraseOnlyMiss
-            ? "está neste documento. A frase exata é que não fecha."
+            ? "is in this document. Exact phrase is what does not close."
             : word.kind === "converge" && word.stage
-              ? `e "${word.docWord}" são tokens diferentes. ${
+              ? `and "${word.docWord}" are different tokens. ${
                   word.fixableBy.length > 0
                     ? optionAdvice(word.fixableBy[0])
                     : convergeAdvice(word.stage)
@@ -201,54 +193,65 @@ function WordLadder({
       </p>
 
       {!word.droppedFromQuery && length.exceeds && (
-        <p className="mt-1.5 text-[11px] leading-snug text-[var(--fg-secondary)]">
-          Separado disso: essa palavra ocupa {length.bytes} bytes
-          {length.bytes !== length.chars && ` (${length.chars} caracteres)`}, acima do limite de{" "}
+        <p className="mt-2 font-sans text-[11.5px] leading-snug text-[var(--fg-secondary)]">
+          Separately from that: this word takes {length.bytes} bytes
+          {length.bytes !== length.chars && ` (${length.chars} characters)`}, over the limit of{" "}
           {maxTokenLength}.
         </p>
       )}
 
       {word.rows && (
-        <table className="mt-2.5 w-full border-collapse text-[11px]">
-          <caption className="mb-1 text-left text-[11px] text-[var(--fg-muted)]">
-            o que cada etapa faz com as duas palavras
-          </caption>
-          <thead>
-            <tr className="text-[var(--fg-muted)]">
-              <th scope="col" className="py-1 pr-2 text-left font-normal">
-                etapa
-              </th>
-              <th scope="col" className="py-1 pr-2 text-left font-normal">
-                busca
-              </th>
-              <th scope="col" className="py-1 pr-2 text-left font-normal">
-                documento
-              </th>
-              <th scope="col" className="py-1 text-left font-normal">
-                resultado
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {word.rows.map((row) => (
-              <tr
-                key={row.stage}
-                className={
-                  row.verdict === "match"
-                    ? "text-[var(--fg-primary)]"
-                    : "text-[var(--fg-secondary)]"
-                }
-              >
-                <th scope="row" className="py-1 pr-2 text-left font-normal whitespace-nowrap">
-                  {stageLabel(row.stage)}
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full border-collapse font-mono text-[11.5px]">
+            <caption className="mb-1.5 text-left text-[11px] text-[var(--fg-muted)]">
+              what each stage does to the two words
+            </caption>
+            <thead>
+              <tr className="text-[var(--fg-muted)]">
+                <th scope="col" className="py-1.5 pr-3 text-left font-normal">
+                  stage
                 </th>
-                <td className="py-1 pr-2">{row.queryForm ?? "descartada"}</td>
-                <td className="py-1 pr-2">{row.docForm ?? "descartada"}</td>
-                <td className="py-1">{VERDICT_COPY[row.verdict]}</td>
+                <th scope="col" className="py-1.5 pr-3 text-left font-normal">
+                  search
+                </th>
+                <th scope="col" className="py-1.5 pr-3 text-left font-normal">
+                  document
+                </th>
+                <th scope="col" className="py-1.5 text-left font-normal">
+                  result
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {word.rows.map((row) => (
+                <tr
+                  key={row.stage}
+                  className={
+                    row.verdict === "match"
+                      ? "text-[var(--fg-primary)]"
+                      : "text-[var(--fg-secondary)]"
+                  }
+                >
+                  <th
+                    scope="row"
+                    className="border-t border-[var(--border-subtle)] py-1.5 pr-3 text-left font-normal whitespace-nowrap"
+                  >
+                    {stageLabel(row.stage)}
+                  </th>
+                  <td className="border-t border-[var(--border-subtle)] py-1.5 pr-3">
+                    {row.queryForm ?? "dropped"}
+                  </td>
+                  <td className="border-t border-[var(--border-subtle)] py-1.5 pr-3">
+                    {row.docForm ?? "dropped"}
+                  </td>
+                  <td className="border-t border-[var(--border-subtle)] py-1.5">
+                    {VERDICT_COPY[row.verdict]}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );
@@ -269,13 +272,17 @@ function TokensTab({
 }) {
   return (
     <div>
-      <p className="mb-4 text-[11px] leading-relaxed text-[var(--fg-secondary)]">
-        Toda palavra gasta uma posição, mesmo quando um filtro descarta ela depois. Os buracos
-        abaixo são posições gastas e vazias, e é por causa deles que a distância entre palavras
-        continua certa numa busca de frase.
+      <p className="mb-5 font-sans text-[12.5px] leading-relaxed text-[var(--fg-secondary)]">
+        Every word spends a position, even when a filter throws it away afterwards. The gaps below
+        are positions that were spent and left empty, and they are the reason the distance between
+        words still holds in an exact phrase search.
       </p>
 
-      <TokenRow label={`busca · ${queryRaw}`} tokens={queryTokens} maxTokenLength={maxTokenLength} />
+      <TokenRow
+        label={`search · ${queryRaw}`}
+        tokens={queryTokens}
+        maxTokenLength={maxTokenLength}
+      />
       <TokenRow label={docId} tokens={docTokens} maxTokenLength={maxTokenLength} />
     </div>
   );
@@ -293,36 +300,40 @@ function TokenRow({
   const slots = withHoles(tokens);
 
   return (
-    <section className="mb-6">
-      <h3 className="mb-2.5 text-[11px] uppercase tracking-[0.08em] text-[var(--fg-muted)]">
+    <section className="mb-7">
+      <h3 className="mb-2.5 font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--fg-muted)]">
         {label}
       </h3>
       {slots.length === 0 ? (
-        <p className="text-[11px] text-[var(--fg-secondary)]">
-          nenhum token sobrou depois da análise.
+        <p className="font-sans text-[12px] text-[var(--fg-secondary)]">
+          No tokens survived the analysis.
         </p>
       ) : (
         <ul className="flex flex-wrap gap-1.5">
-          {slots.map((slot) =>
+          {slots.map((slot, index) =>
             slot.kind === "hole" ? (
               <li
                 key={`hole-${slot.position}`}
-                className="min-w-[52px] rounded-md border border-dashed border-[var(--border-strong)] px-2 py-1.5"
+                style={{ "--nm-delay": `${index * 25}ms` } as React.CSSProperties}
+                className="nm-rise min-w-[56px] rounded-[var(--radius-sm)] border border-dashed border-[var(--border-strong)] px-2 py-1.5"
               >
-                <span className="block text-[13px] text-[var(--fg-muted)]">·</span>
-                <span className="mt-0.5 block text-[10px] text-[var(--fg-muted)]">
-                  pos {slot.position}, descartada
+                <span aria-hidden className="block font-mono text-[13px] text-[var(--fg-muted)]">
+                  ·
+                </span>
+                <span className="mt-0.5 block font-mono text-[10px] text-[var(--fg-muted)]">
+                  pos {slot.position}, dropped
                 </span>
               </li>
             ) : (
               <li
                 key={`tok-${slot.position}`}
-                className="min-w-[52px] rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2 py-1.5"
+                style={{ "--nm-delay": `${index * 25}ms` } as React.CSSProperties}
+                className="nm-rise min-w-[56px] rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2 py-1.5"
               >
-                <span className="block text-[13px] text-[var(--fg-primary)]">
+                <span className="block font-mono text-[13px] break-all text-[var(--fg-primary)]">
                   {slot.token.text}
                 </span>
-                <span className="mt-0.5 block text-[10px] text-[var(--fg-muted)]">
+                <span className="mt-0.5 block font-mono text-[10px] text-[var(--fg-muted)]">
                   pos {slot.position} ·{" "}
                   <TokenBytes text={slot.token.text} maxTokenLength={maxTokenLength} />
                 </span>
@@ -338,10 +349,10 @@ function TokenRow({
 function TokenBytes({ text, maxTokenLength }: { text: string; maxTokenLength: number }) {
   const { bytes, chars, exceeds } = checkMaxLength(text, maxTokenLength);
   return (
-    <span className={exceeds ? "text-[var(--fg-brand)]" : undefined}>
+    <span className={exceeds ? "text-[var(--status-error-fg)]" : undefined}>
       {bytes} bytes
-      {bytes !== chars && ` (${chars} caracteres)`}
-      {exceeds && ", acima do limite"}
+      {bytes !== chars && ` (${chars} characters)`}
+      {exceeds && ", over the limit"}
     </span>
   );
 }

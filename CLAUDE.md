@@ -42,13 +42,14 @@ What is actually installed, verified against `package.json`. When this drifts, f
 | Language | TypeScript, strict |
 | Styling | Tailwind CSS v4 via `@tailwindcss/postcss` |
 | Design system | entrepta, components copied in and owned as code, dark first |
+| Primitives | Radix dialog, dropdown menu, tabs, slot. Only under an entrepta component |
+| Motion | CSS keyframes in `app/globals.css`, plus `tw-animate-css` for the Radix open/close states |
+| Fonts | Newsreader, JetBrains Mono, Inter, self-hosted through `next/font` |
 | Lint | ESLint 9 with `eslint-config-next` |
 | Package manager | npm |
 | Analysis engine | `alyze`, Rust, compiled to WASM and committed under `public/wasm/` |
 | Ranking | BM25, written here in TypeScript |
 | Deploy | Vercel |
-
-Not installed yet, and needed: entrepta.
 
 No global state manager. No fetch library. No backend. A new dependency needs a line in `docs/DECISIONS.md` saying why.
 
@@ -61,6 +62,9 @@ Everything runs on the client. There is no server.
 ```
 app/
   page.tsx               the one route, and the state that ties it together
+  layout.tsx             fonts, metadata, the one <html>
+  icon.svg               the favicon
+  globals.css            entrepta tokens, then the nomatch surfaces and keyframes
   components/            the interface
   components/entrepta/   design system components, copied in and owned as code
 lib/
@@ -135,11 +139,13 @@ Record the exact `alyze` commit in `docs/DECISIONS.md`. Regenerate the artifact 
 
 Decided whether a document comes back at all, separate from ranking (BM25, phase 4) and separate from explaining a miss (the stage ladder, below). Lives in `lib/search/`, and takes tokens that are already analyzed: it never touches the WASM module.
 
-**OR, not AND.** A document matches if it shares at least one token with the query. `café da manhã` against a document that only has `manhã` still comes back. `ausentes` in the interface means zero tokens in common, not "missing one of several."
+**OR, not AND.** A document matches if it shares at least one token with the query. `café da manhã` against a document that only has `manhã` still comes back. `missing` in the interface means zero tokens in common, not "missing one of several."
 
 **Exact phrase is an option, not a rewrite of OR.** When it's on, a document only matches if the query's tokens appear as a contiguous run, in order. "Contiguous" is measured in position deltas, not array index: every word-like token spends a position even when a filter drops it afterwards (see "alyze" above), so a stopword dropped from both the query and the document at the same relative spot doesn't break the phrase. That is the actual reason `alyze` keeps the gaps instead of compacting positions after filtering; phrase matching is what spends that data. `lib/search/match.test.ts` pins this with a case where a real word sits between the query's terms in the document (correctly not a match) against one where a stopword was dropped identically on both sides (correctly still a match).
 
-The search button is explicit. Neither matching nor the ladder run on a keystroke or a debounce.
+Typed text waits for the search button. A toggle does not: it is a discrete choice, one click, and its column re-analyses on the spot, because the count moving under your finger is the thing this tool is teaching. The rule is about keystrokes and debounces, not about every input on the page.
+
+A toggle re-runs **its own column only**, and always against what the last search committed to, never against unsaved corpus edits. A and B looking at different documents would make the comparison meaningless.
 
 ---
 
@@ -191,21 +197,22 @@ Keep the implementation short and readable. The formula is public. The value her
 
 ## Design
 
-entrepta, dark first, theme `bosco` (blue `#2563eb`). Mono is the default UI font, serif for the big counts and panel titles. `◆` marks a section, `//` introduces a comment, and a brand status bar sits at the bottom.
+entrepta, dark first, theme `bosco` (blue `#2563eb`). Mono is the default UI font, serif for the two counts and every title. `◆` marks a section, `//` introduces a comment, and a brand status bar sits at the bottom.
 
-The screen, top to bottom:
+The page is three bands, separated by a hairline that carries brand colour in the middle and dies at both ends:
 
-- Header: `nomatch.` with the brand dot, the question as a `//` comment, and the one-line lesson on the right, `o match é entre tokens, não entre palavras`
-- The search input, 22px, centered at 760px, with the search button under it. One search feeds both columns
-- Corpus panel on the left, 300px, collapsible into a vertical rail above `lg`. Corpus picker, one textarea per document, add and remove
-- Columns A and B in a two-track grid, one `Column` component with different props. Language select, four analysis toggles plus exact phrase, the blocked-combination note, the ranking parameters behind a disclosure, then a 44px serif count, then the ranked results, then `ausentes · N`
-- Every absent row is a button. Clicking one opens the side panel for that document in that column
-- Side panel, 560px, two tabs. The ladder table is `etapa / busca / documento / resultado`, one row per stage, and under it the button that applies the fix to the other column
-- Token tab: one chip per position, holes included, with bytes and, when they differ, characters
-- Fixed bottom left, `lg` and up: `◆ schema · full_text_search`, both columns as JSON, copy per column
-- Status bar, brand fill, pinned, hidden below `sm`
+- **Sticky top bar.** `nomatch.` with the brand dot on the left. On the right, `schema` and `how it works`, both of which open a dialog
+- **Hero**, centred at 820px. An eyebrow, the question as an `h1` in serif at `clamp(32px, 6.4vw, 58px)`, one paragraph of what the tool does, then the search field at 20px with the search button inside it on the right. Under it, the corpus pills and a live region for the analyzer's boot state. A brand glow sits behind the field and leans in on focus
+- **The two columns**, one `Column` component with different props, in a two-track grid that stacks below `lg`. Each card: the letter and the option signature, the language picker, then a 64px serif count with the delta against the other column, then the analysis toggles, then `found`, then `missing`, then the ranking parameters behind a disclosure at the bottom
+- **Corpus**, full width under the columns, collapsible, one card per document in a grid of up to four tracks. Editing text does not re-run anything, so the header says when what is on screen no longer matches what ran
 
-Interface copy is in Portuguese, because the problem is a Portuguese problem. Docs, code and commit messages are in English.
+Every missing row is a button. It opens a drawer, which is the same entrepta dialog anchored right: focus goes into it, escape closes it, and the page behind it stops taking clicks. Two tabs, `ladder` and `tokens`. The ladder table is `stage / search / document / result`, one row per stage, and under it the button that applies the fix to the other column and closes the drawer.
+
+**Motion.** Only `transform` and `opacity`, and the reduced-motion block in `globals.css` collapses all of it. A staggered entrance on load, the counts counting up from their previous value, a one-shot brand outline on a card whose number moved, and an indeterminate sweep on the column that is re-analysing. Nothing loops.
+
+**A background is not decoration here.** The blueprint grid and the grain exist so a page that is 90% near-black does not band on a cheap panel. Both derive from theme tokens; no colour in `globals.css` past the primitives is a literal.
+
+Interface copy is in English. The corpus is where the Portuguese lives, because that is where the problem is: the tool is read by people who do not speak it, and the failure it demonstrates has to survive that.
 
 **A badly written stage explanation is a bug**, not a caption. Interface text is the product here.
 
@@ -254,7 +261,8 @@ The attribution is the product's central claim, and it is the first thing an int
 ## Conventions
 
 - The UI never touches the WASM module directly. Everything goes through the worker
-- The ladder runs per document per query, not per keystroke. Debounce, or run it when the query settles
+- The ladder runs per document per query, not per keystroke. It runs when a missing row is clicked, never on the way to one
+- A toggle re-analyses its own column immediately. Typed text still waits for the search button
 - Every count shown to a person is in bytes, with characters beside it when they differ
 - entrepta components are owned code. Edit them directly, do not wrap and override from outside
 - Every colour is a theme token from `app/globals.css`. Never a hardcoded hex, or the theme stops reacting. Brand accents are `--fg-brand` and the tints entrepta derives from it per theme, such as `--bg-surface-brand`. Errors use `--status-error-fg`, not the brand

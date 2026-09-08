@@ -28,7 +28,7 @@ export interface Corpus {
 
 export const CORPUS_PT: Corpus = {
   id: "pt",
-  label: "português",
+  label: "portuguese",
   language: "portuguese",
   query: "cafe",
   fix: "ascii_folding",
