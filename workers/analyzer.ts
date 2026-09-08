@@ -8,12 +8,11 @@
 // Turbopack. webpackIgnore skips bundling for both webpack and Turbopack.
 // See CLAUDE.md, "Building the WASM artifact".
 
-import type { WorkerRequest, WorkerResponse, Token, LanguageInfo } from "@/lib/alyze/types";
+import type { WorkerRequest, WorkerResponse, Token } from "@/lib/alyze/types";
 
 type AlyzeModule = {
   default: (input?: string | URL) => Promise<unknown>;
   analyze: (text: string, options: unknown) => Token[];
-  languages: () => LanguageInfo[];
 };
 
 let modulePromise: Promise<AlyzeModule> | null = null;
@@ -33,8 +32,8 @@ function loadModule(): Promise<AlyzeModule> {
   return modulePromise;
 }
 
-// Start loading immediately. The main thread's boot shimmer
-// ("abrindo o analisador...") covers this.
+// Start loading immediately. The main thread's boot line
+// ("opening the analyzer...") covers this.
 loadModule()
   .then(() => {
     postMessage({ type: "ready" });
@@ -55,29 +54,14 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   try {
     const alyze = await loadModule();
 
-    if (request.type === "analyze") {
-      const tokens = alyze.analyze(request.text, request.options);
-      const response: WorkerResponse = {
-        id: request.id,
-        type: "analyze",
-        ok: true,
-        tokens,
-      };
-      postMessage(response);
-      return;
-    }
-
-    if (request.type === "languages") {
-      const languages = alyze.languages();
-      const response: WorkerResponse = {
-        id: request.id,
-        type: "languages",
-        ok: true,
-        languages,
-      };
-      postMessage(response);
-      return;
-    }
+    const tokens = alyze.analyze(request.text, request.options);
+    const response: WorkerResponse = {
+      id: request.id,
+      type: "analyze",
+      ok: true,
+      tokens,
+    };
+    postMessage(response);
   } catch (err) {
     const response: WorkerResponse = {
       id: request.id,

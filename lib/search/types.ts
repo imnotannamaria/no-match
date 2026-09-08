@@ -9,7 +9,7 @@ export interface MatchOptions {
 
 export interface MatchResult {
   matched: boolean;
-  /** Query terms found in the document. Empty for a phrase match. */
+  /** Query terms found in the document. On a phrase match, every query term, because a phrase match means all of them landed. */
   matchedTerms: string[];
 }
 

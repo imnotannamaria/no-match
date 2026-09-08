@@ -22,6 +22,8 @@ interface ColumnProps {
   total: number;
   /** This column is re-analysing. Only ever true for the column that changed. */
   searching: boolean;
+  /** This column's own analysis failed. Kept per column: the other one may be fine. */
+  error: string | null;
   /** How many more documents this column found than the other one. Null when there is nothing to compare against. */
   delta: number | null;
   onChangeConfig: (next: ColumnConfig) => void;
@@ -46,6 +48,7 @@ export function Column({
   ranked,
   total,
   searching,
+  error,
   delta,
   onChangeConfig,
   onOpenPanel,
@@ -62,6 +65,10 @@ export function Column({
   const found = result ? ranked.length : null;
   const display = useCountUp(found);
   const topScore = ranked[0]?.score ?? 0;
+
+  // Matching is OR, so a document can come back on one word out of three.
+  // With a single-word search that is obvious and saying it is noise.
+  const showMatchedTerms = (result?.queryTokens.length ?? 0) > 1;
 
   // What this column is running, in one line, so the two headers can be
   // compared without reading both sets of toggles.
@@ -90,15 +97,18 @@ export function Column({
       )}
 
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-subtle)] px-5 py-3">
-        <span className="flex min-w-0 items-center gap-2.5">
+        <h2 className="flex min-w-0 items-center gap-2.5 font-normal">
           <span
             aria-hidden
             className="grid size-6 shrink-0 place-items-center rounded-[var(--radius-sm)] border border-[var(--fg-brand)] bg-[var(--bg-surface-brand)] font-serif text-[13px] leading-none text-[var(--fg-brand-hover)]"
           >
             {id}
           </span>
-          <span className="truncate font-mono text-[11px] text-[var(--fg-muted)]">{signature}</span>
-        </span>
+          <span className="truncate font-mono text-[11px] text-[var(--fg-muted)]">
+            <span className="sr-only">configuration {id}, running </span>
+            {signature}
+          </span>
+        </h2>
 
         <MenuSelect
           label={`analysis language for column ${id}`}
@@ -171,6 +181,15 @@ export function Column({
         )}
       </div>
 
+      {error && (
+        <p
+          role="alert"
+          className="mx-5 mb-4 rounded-[var(--radius-sm)] border border-[var(--status-error)] bg-[var(--status-error-soft)] px-2.5 py-2 font-sans text-[11.5px] leading-snug text-[var(--status-error-fg)]"
+        >
+          This column could not be analysed: {error}
+        </p>
+      )}
+
       {result?.emptyQueryNote && (
         <p
           role="status"
@@ -206,12 +225,13 @@ export function Column({
                         {item.doc.text}
                       </span>
                       <span className="mt-1.5 flex items-center gap-2">
-                        <span className="shrink-0 font-mono text-[10px] text-[var(--fg-muted)]">
+                        <span className="min-w-0 truncate font-mono text-[10px] text-[var(--fg-muted)]">
                           {item.doc.id}
+                          {showMatchedTerms && ` · matched on ${item.matchedTerms.join(", ")}`}
                         </span>
                         <span
                           aria-hidden
-                          className="h-px min-w-0 flex-1 bg-[var(--border-subtle)]"
+                          className="h-px w-14 shrink-0 bg-[var(--border-subtle)]"
                         >
                           <span
                             className="block h-px bg-[var(--nm-rail)]"

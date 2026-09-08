@@ -36,7 +36,7 @@ So: the wasm module ships all 18 languages. The v1 language picker in the UI onl
 
 ### Matching is OR
 
-A document matches if it shares at least one token with the query, not all of them. Asked directly, and OR is the answer: `ausentes` means zero tokens in common with the query, not "missing at least one of several." See CLAUDE.md, "Matching".
+A document matches if it shares at least one token with the query, not all of them. Asked directly, and OR is the answer: `missing` means zero tokens in common with the query, not "missing at least one of several." See CLAUDE.md, "Matching".
 
 ### Exact phrase search, because it turned out cheap
 
@@ -120,7 +120,7 @@ The holes still matter, and still exist: phrase matching reads them, and the tok
 
 `lib/bm25/score.ts` takes analyzed tokens and parameters. No analyzer, no worker, no corpus text. The page holds the analyzed tokens in state after a search and recomputes the order with `useMemo` over `[lastSearch, bm25]`, so `k1`, `b` and `k3` cannot reach the worker even by accident.
 
-Measured in the browser by counting `Worker.prototype.postMessage`: a search over the four example documents costs 5 calls, one for the query and one per document. Moving a ranking parameter afterwards costs 0, and the order changes on screen. With `b` at 0 a long document holding the term twice outranks a short one holding it once; at 0.75 and 1 the short one wins. The numbers match a calculation worked out by hand before the code existed, kept in `lib/bm25/score.test.ts`.
+Measured in the browser by counting `Worker.prototype.postMessage`: a search over the four example documents costs 5 calls per column, one for the query and one per document. Moving a ranking parameter afterwards costs 0, and the order changes on screen. With `b` at 0 a long document holding the term twice outranks a short one holding it once; at 0.75 and 1 the short one wins. The numbers match a calculation worked out by hand before the code existed, kept in `lib/bm25/score.test.ts`.
 
 ### Scores are shown to three decimals
 
@@ -207,6 +207,8 @@ The rule was about keystrokes: running the analyzer per character, or worse the 
 Typed text still waits for the button. Corpus edits still wait for the button, and the corpus header now says so when the two have drifted apart.
 
 The re-run uses the query and documents the **last search committed to**, not what is currently in the boxes. Otherwise a half-typed document would reach column B and not column A, and the comparison would be between two different corpora.
+
+Which changes count is decided by `needsReanalysis` in `lib/columns.ts`, not by the click handler. The first draft re-ran on any configuration change, which quietly included `k1`, `b` and `k3`, and sent a ranking parameter to the analyzer. That breaks the separation the whole project is about, and neither lint nor the type checker can see it, so it is pinned by tests in `lib/columns.test.ts` and re-measured in the browser: moving `b` costs 0 calls.
 
 ## Motion is CSS, and Radix owns the states that are hard
 

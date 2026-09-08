@@ -11,7 +11,7 @@ const buttonVariants = cva(
     "group relative inline-flex items-center justify-center gap-2 shrink-0 whitespace-nowrap",
     "font-mono font-medium",
     "border rounded-[var(--radius-md)]",
-    "transition-all duration-150 ease-out",
+    "transition-[background-color,border-color,color,box-shadow,transform,opacity] duration-150 ease-out",
     "focus-visible:outline-none focus-visible:border-[var(--fg-brand)] focus-visible:shadow-[0_0_0_3px_var(--bg-surface-brand)]",
     "disabled:pointer-events-none disabled:opacity-40 disabled:cursor-not-allowed",
   ],

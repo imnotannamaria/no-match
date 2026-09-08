@@ -4,20 +4,17 @@
 // UI gets: it never imports the WASM module or workers/analyzer.ts's
 // internals directly. See CLAUDE.md, "Architecture".
 
-import type {
-  AnalysisOptions,
-  LanguageInfo,
-  Token,
-  WorkerMessage,
-  WorkerRequest,
-} from "@/lib/alyze/types";
+import type { AnalysisOptions, Token, WorkerMessage, WorkerRequest } from "@/lib/alyze/types";
 
-type PendingEntry =
-  | { kind: "analyze"; resolve: (tokens: Token[]) => void; reject: (err: Error) => void }
-  | { kind: "languages"; resolve: (languages: LanguageInfo[]) => void; reject: (err: Error) => void };
+interface PendingEntry {
+  resolve: (tokens: Token[]) => void;
+  reject: (err: Error) => void;
+}
 
 class AnalyzerClient {
   private worker: Worker | null = null;
+  /** Set once the worker is unusable. Every later call rejects with it. */
+  private fatal: Error | null = null;
   private nextId = 1;
   private pending = new Map<number, PendingEntry>();
   private readyPromise: Promise<void> | null = null;
@@ -36,6 +33,7 @@ class AnalyzerClient {
   }
 
   private fail(err: Error): void {
+    this.fatal = err;
     this.rejectReady?.(err);
     for (const [, entry] of this.pending) entry.reject(err);
     this.pending.clear();
@@ -82,39 +80,27 @@ class AnalyzerClient {
         return;
       }
 
-      if (entry.kind === "analyze" && message.type === "analyze") {
-        entry.resolve(message.tokens);
-      } else if (entry.kind === "languages" && message.type === "languages") {
-        entry.resolve(message.languages);
-      }
+      entry.resolve(message.tokens);
     };
 
     this.worker = worker;
   }
 
   async analyze(text: string, options: AnalysisOptions): Promise<Token[]> {
+    // A worker that failed to start never answers, so a request posted to
+    // it would leave the caller waiting forever. Fail loudly instead.
+    if (this.fatal) throw this.fatal;
     this.ensureWorker();
     const id = this.nextId++;
     const request: WorkerRequest = { id, type: "analyze", text, options };
 
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { kind: "analyze", resolve, reject });
-      this.worker!.postMessage(request);
-    });
-  }
-
-  async languages(): Promise<LanguageInfo[]> {
-    this.ensureWorker();
-    const id = this.nextId++;
-    const request: WorkerRequest = { id, type: "languages" };
-
-    return new Promise((resolve, reject) => {
-      this.pending.set(id, { kind: "languages", resolve, reject });
+      this.pending.set(id, { resolve, reject });
       this.worker!.postMessage(request);
     });
   }
 }
 
-// One worker for the whole app. Phase 1 only ever analyzes one sentence at a
-// time, but the corpus work in later phases reuses this same instance.
+// One worker for the whole app. Every column, every document and every rung
+// of the ladder goes through this instance.
 export const analyzerClient = new AnalyzerClient();

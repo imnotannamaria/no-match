@@ -55,3 +55,16 @@ export const CORPUS_EN: Corpus = {
 };
 
 export const CORPORA: Corpus[] = [CORPUS_PT, CORPUS_EN];
+
+/**
+ * The next free document id. Counting from the length reuses an id after a
+ * removal: drop doc-2 from four documents and the next one added would be
+ * doc-4 again, colliding with the doc-4 already there. Two documents with
+ * the same id share a React key, and editing one edits both.
+ */
+export function nextDocId(docs: ExampleDocument[]): string {
+  const used = new Set(docs.map((doc) => doc.id));
+  let n = docs.length + 1;
+  while (used.has(`doc-${n}`)) n++;
+  return `doc-${n}`;
+}

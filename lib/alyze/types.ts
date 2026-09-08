@@ -35,14 +35,6 @@ export interface Token {
   end: number;
 }
 
-/** One entry from `alyze`'s `languages()` call. Drives the language picker. */
-export interface LanguageInfo {
-  id: string;
-  label: string;
-  stemming: boolean;
-  stopwords: boolean;
-}
-
 // -- Worker message contract --------------------------------------------
 //
 // Every message that crosses the worker boundary, both directions. The UI
@@ -56,12 +48,7 @@ export interface AnalyzeRequest {
   options: AnalysisOptions;
 }
 
-export interface LanguagesRequest {
-  id: number;
-  type: "languages";
-}
-
-export type WorkerRequest = AnalyzeRequest | LanguagesRequest;
+export type WorkerRequest = AnalyzeRequest;
 
 export interface AnalyzeResponse {
   id: number;
@@ -70,21 +57,14 @@ export interface AnalyzeResponse {
   tokens: Token[];
 }
 
-export interface LanguagesResponse {
-  id: number;
-  type: "languages";
-  ok: true;
-  languages: LanguageInfo[];
-}
-
 export interface ErrorResponse {
   id: number;
-  type: "analyze" | "languages";
+  type: "analyze";
   ok: false;
   message: string;
 }
 
-export type WorkerResponse = AnalyzeResponse | LanguagesResponse | ErrorResponse;
+export type WorkerResponse = AnalyzeResponse | ErrorResponse;
 
 /** Sent once, unprompted, when the wasm module has finished loading. */
 export interface ReadyMessage {

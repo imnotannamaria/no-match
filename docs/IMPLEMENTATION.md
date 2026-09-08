@@ -54,7 +54,7 @@ Compile `alyze`, commit the artifact, load it inside a Web Worker, analyze one s
 Paste several documents, type a search, get yes or no per document. No ranking, no reasons, no second column.
 
 - [x] Matching is OR: a document sharing one token with the query comes back
-- [x] `ausentes` means zero tokens in common, and the count says so
+- [x] `missing` means zero tokens in common, and the count says so
 - [x] Exact phrase compares position deltas, not array indices, so a stopword dropped identically from both sides does not break the phrase
 - [x] A real word between the query's terms in the document does break the phrase
 - [x] The invalid combination (`stemming` or `remove_stopwords` with `case_sensitive: true`) is unreachable in the UI, not merely rejected downstream

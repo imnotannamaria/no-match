@@ -279,7 +279,8 @@ function TokensTab({
       </p>
 
       <TokenRow
-        label={`search · ${queryRaw}`}
+        label="search"
+        detail={queryRaw}
         tokens={queryTokens}
         maxTokenLength={maxTokenLength}
       />
@@ -290,10 +291,13 @@ function TokensTab({
 
 function TokenRow({
   label,
+  detail,
   tokens,
   maxTokenLength,
 }: {
   label: string;
+  /** Text the person typed. Kept out of the uppercase run: it is their content, not a label. */
+  detail?: string;
   tokens: Token[];
   maxTokenLength: number;
 }) {
@@ -301,8 +305,9 @@ function TokenRow({
 
   return (
     <section className="mb-7">
-      <h3 className="mb-2.5 font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--fg-muted)]">
-        {label}
+      <h3 className="mb-2.5 font-mono text-[10px] tracking-[0.1em] text-[var(--fg-muted)]">
+        <span className="uppercase">{label}</span>
+        {detail && <span className="tracking-normal normal-case"> · {detail}</span>}
       </h3>
       {slots.length === 0 ? (
         <p className="font-sans text-[12px] text-[var(--fg-secondary)]">

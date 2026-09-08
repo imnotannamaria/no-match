@@ -32,8 +32,3 @@ export function withHoles(tokens: Token[]): PositionSlot[] {
   }
   return slots;
 }
-
-/** How many positions were spent on tokens that no longer exist. */
-export function holeCount(tokens: Token[]): number {
-  return withHoles(tokens).filter((slot) => slot.kind === "hole").length;
-}

@@ -77,6 +77,16 @@ For one search token against one document token:
 
 `max_token_length` sits outside this ladder and is reported on its own, always in bytes.
 
+## What recalculates when
+
+This is the board the project was planned from: the path a search takes, what has to be recomputed when each input changes, and the states the screen can be in.
+
+![Planning board: the flow from the interface through the Web Worker to the tokens on screen, a diagram of which work depends on which input, and the five screen states](public/board.png)
+
+The middle diagram is the one that decided the architecture. Analysis depends on the text and the options, matching depends on the query, and scoring depends on `k1`, `b` and `k3`. They are three separate boundaries, so moving a ranking parameter reorders the list without sending anything back to the analyzer. That is measurable, not a claim. Measured against the production build: a search over four documents costs five calls to the analyzer per column, ten in total. Flipping one toggle costs five, for that column alone. Moving `b` costs zero.
+
+Two things drifted from the board while building. "Build the index" turned out to be corpus statistics for BM25, because there is no index here to build. And analysis no longer waits for the search button when you flip a toggle: a toggle is one discrete choice, so its column re-analyses on the spot. Typed text still waits.
+
 ## Running it
 
 ```bash

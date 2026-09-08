@@ -67,6 +67,7 @@ app/
   globals.css            entrepta tokens, then the nomatch surfaces and keyframes
   components/            the interface
   components/entrepta/   design system components, copied in and owned as code
+  hooks/                 dark and light mode, backed by localStorage
 lib/
   alyze/                 shared types, the client that talks to the worker, validation, schema
   search/                whether a document matches, and whether the query survived analysis
@@ -201,7 +202,7 @@ entrepta, dark first, theme `bosco` (blue `#2563eb`). Mono is the default UI fon
 
 The page is three bands, separated by a hairline that carries brand colour in the middle and dies at both ends:
 
-- **Sticky top bar.** `nomatch.` with the brand dot on the left. On the right, `schema` and `how it works`, both of which open a dialog
+- **Sticky top bar.** `nomatch.` with the brand dot on the left. On the right, `schema` and `how it works`, both of which open a dialog, and the dark and light toggle. `ModeScript` in the document head applies the stored mode before first paint, so nobody sees a frame of the wrong one
 - **Hero**, centred at 820px. An eyebrow, the question as an `h1` in serif at `clamp(32px, 6.4vw, 58px)`, one paragraph of what the tool does, then the search field at 20px with the search button inside it on the right. Under it, the corpus pills and a live region for the analyzer's boot state. A brand glow sits behind the field and leans in on focus
 - **The two columns**, one `Column` component with different props, in a two-track grid that stacks below `lg`. Each card: the letter and the option signature, the language picker, then a 64px serif count with the delta against the other column, then the analysis toggles, then `found`, then `missing`, then the ranking parameters behind a disclosure at the bottom
 - **Corpus**, full width under the columns, collapsible, one card per document in a grid of up to four tracks. Editing text does not re-run anything, so the header says when what is on screen no longer matches what ran

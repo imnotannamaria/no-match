@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { holeCount, withHoles } from "@/lib/tokens/positions";
+import { withHoles } from "@/lib/tokens/positions";
 import type { Token } from "@/lib/alyze/types";
 
 function tok(text: string, position: number): Token {
@@ -39,9 +39,3 @@ describe("withHoles", () => {
   });
 });
 
-describe("holeCount", () => {
-  it("counts positions spent on tokens that no longer exist", () => {
-    expect(holeCount([tok("café", 1), tok("manhã", 3)])).toBe(1);
-    expect(holeCount([tok("café", 0), tok("manhã", 1)])).toBe(0);
-  });
-});

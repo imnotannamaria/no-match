@@ -37,6 +37,7 @@ export function CorpusPanel({
   return (
     <section aria-label="corpus" className="mx-auto w-full max-w-[1240px]">
       <header className="flex flex-wrap items-center justify-between gap-3 pb-4">
+        <h2 className="font-normal">
         <button
           type="button"
           aria-expanded={open}
@@ -57,6 +58,7 @@ export function CorpusPanel({
             {open ? "▴" : "▾"}
           </span>
         </button>
+        </h2>
 
         {open && (
           <div className="flex items-center gap-2">

@@ -9,7 +9,13 @@ import { analyzerClient } from "@/lib/alyze/client";
 import type { AnalysisOptions, Token } from "@/lib/alyze/types";
 import { evaluateDocument } from "@/lib/search/match";
 import { explainEmptyQuery } from "@/lib/search/empty-query";
-import { CORPORA, CORPUS_PT, type Corpus, type ExampleDocument } from "@/lib/corpora";
+import {
+  CORPORA,
+  CORPUS_PT,
+  nextDocId,
+  type Corpus,
+  type ExampleDocument,
+} from "@/lib/corpora";
 import { buildCorpusStats, rank } from "@/lib/bm25/score";
 import { explainDocument, extractRawWords } from "@/lib/ladder/explain";
 import { applyFix, suggestFix, type Fix } from "@/lib/ladder/fix";
@@ -17,12 +23,14 @@ import type { DocumentExplanation } from "@/lib/ladder/types";
 import {
   COLUMN_IDS,
   initialConfigs,
+  needsReanalysis,
   otherColumn,
   type ColumnConfig,
   type ColumnId,
   type ColumnResult,
 } from "@/lib/columns";
 import { Button } from "@/app/components/entrepta/button";
+import { ModeToggle } from "@/app/components/entrepta/mode-toggle";
 import { StatusBar, StatusBarItem } from "@/app/components/entrepta/status-bar";
 import { Column } from "@/app/components/column";
 import { CorpusPanel } from "@/app/components/corpus-panel";
@@ -111,7 +119,7 @@ export default function Home() {
   });
   const [results, setResults] = useState<Results>(NO_RESULTS);
   const [busy, setBusy] = useState<Busy>({ A: false, B: false });
-  const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<ColumnId, string | null>>({ A: null, B: null });
 
   const [panel, setPanel] = useState<OpenPanel | null>(null);
   const [explanation, setExplanation] = useState<DocumentExplanation | null>(null);
@@ -135,11 +143,11 @@ export default function Home() {
       try {
         const next = await analyzeColumn(input.query, input.docs, config);
         if (serial !== runSerial.current[id]) return;
-        setError(null);
+        setErrors((prev) => ({ ...prev, [id]: null }));
         setResults((prev) => ({ ...prev, [id]: next }));
       } catch (err) {
         if (serial !== runSerial.current[id]) return;
-        setError(err instanceof Error ? err.message : String(err));
+        setErrors((prev) => ({ ...prev, [id]: err instanceof Error ? err.message : String(err) }));
         setResults((prev) => ({ ...prev, [id]: null }));
       } finally {
         if (serial === runSerial.current[id]) {
@@ -182,10 +190,14 @@ export default function Home() {
    * A toggle is a discrete choice, so its column re-analyses immediately:
    * the count moving under your finger is the thing the tool is teaching.
    * Typed text is different, and still waits for the search button.
+   *
+   * A ranking parameter goes nowhere near the analyzer. That is the
+   * separation the project is about, so it is checked rather than assumed.
    */
   function setConfig(id: ColumnId, next: ColumnConfig) {
+    const previous = configs[id];
     setConfigs((prev) => ({ ...prev, [id]: next }));
-    if (ready) void runColumn(id, committed, next);
+    if (ready && needsReanalysis(previous, next)) void runColumn(id, committed, next);
   }
 
   function search() {
@@ -314,6 +326,7 @@ export default function Home() {
           <nav aria-label="about this tool" className="flex items-center gap-1">
             <SchemaPanel configs={configs} />
             <Onboarding />
+            <ModeToggle size="sm" storageKey="nomatch" className="ml-1" />
           </nav>
         </div>
       </header>
@@ -364,10 +377,16 @@ export default function Home() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && ready) search();
                 }}
-                className="w-full rounded-[var(--radius-md)] border border-[var(--border-strong)] bg-[var(--bg-surface)] py-4 pr-[118px] pl-4 font-mono text-[20px] text-[var(--fg-primary)] transition-[border-color,box-shadow] duration-200 outline-none placeholder:text-[var(--fg-muted)] hover:border-[var(--fg-muted)] focus-visible:border-[var(--fg-brand)] focus-visible:shadow-[0_0_0_3px_var(--bg-surface-brand)]"
+                className="w-full rounded-[var(--radius-lg)] border border-[var(--border-strong)] bg-[var(--bg-surface)] py-4 pr-[136px] pl-5 font-mono text-[20px] text-[var(--fg-primary)] transition-[border-color,box-shadow] duration-200 outline-none placeholder:text-[var(--fg-muted)] hover:border-[var(--fg-muted)] focus-visible:border-[var(--fg-brand)] focus-visible:shadow-[0_0_0_3px_var(--bg-surface-brand)]"
               />
               <div className="absolute top-1/2 right-2 -translate-y-1/2">
-                <Button variant="primary" size="sm" onClick={search} disabled={!ready}>
+                <Button
+                  variant="primary"
+                  size="lg"
+                  className="rounded-[var(--radius-sm)]"
+                  onClick={search}
+                  disabled={!ready}
+                >
                   Search
                 </Button>
               </div>
@@ -401,10 +420,6 @@ export default function Home() {
                 <p className="font-mono text-[11.5px] text-[var(--fg-secondary)]">
                   opening the analyzer · stopword lists and stemmers…
                 </p>
-              ) : error ? (
-                <p role="alert" className="font-mono text-[11.5px] text-[var(--status-error-fg)]">
-                  {error}
-                </p>
               ) : null}
             </div>
           </div>
@@ -426,6 +441,7 @@ export default function Home() {
               ranked={ranked[id]}
               total={committed.docs.length}
               searching={busy[id]}
+              error={errors[id]}
               delta={delta(id)}
               onChangeConfig={(next) => setConfig(id, next)}
               onOpenPanel={(docId) => openPanel(id, docId)}
@@ -444,7 +460,7 @@ export default function Home() {
             setDocs((prev) => prev.map((d) => (d.id === id ? { ...d, text } : d)))
           }
           onRemoveDoc={(id) => setDocs((prev) => prev.filter((d) => d.id !== id))}
-          onAddDoc={() => setDocs((prev) => [...prev, { id: `doc-${prev.length + 1}`, text: "" }])}
+          onAddDoc={() => setDocs((prev) => [...prev, { id: nextDocId(prev), text: "" }])}
           onSearch={search}
         />
       </main>

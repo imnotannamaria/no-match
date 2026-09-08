@@ -56,6 +56,20 @@ export function initialConfigs(corpus: Corpus): Record<ColumnId, ColumnConfig> {
   };
 }
 
+/**
+ * Whether a configuration change has to go back to the analyzer.
+ *
+ * This is the separation the whole project rests on: analysis decides
+ * which documents come back, BM25 only decides the order of the ones that
+ * already did. Moving k1, b or k3 must cost zero calls to the analyzer,
+ * and the only way that stays true is if something checks.
+ */
+export function needsReanalysis(previous: ColumnConfig, next: ColumnConfig): boolean {
+  if (previous.phrase !== next.phrase) return true;
+  const keys = Object.keys(next.options) as (keyof AnalysisOptions)[];
+  return keys.some((key) => previous.options[key] !== next.options[key]);
+}
+
 export function otherColumn(id: ColumnId): ColumnId {
   return id === "A" ? "B" : "A";
 }
