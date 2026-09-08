@@ -34,6 +34,8 @@ export interface LadderRow {
   verdict: LadderVerdict;
 }
 
+export type FixableOption = "ascii_folding" | "stemming";
+
 export type LadderKind = "converge" | "disappeared" | "never";
 
 export interface LadderExplanation {
@@ -44,6 +46,14 @@ export interface LadderExplanation {
   /** For "converge": the stage where they first became equal. For "disappeared": the stage that dropped the document word. Null for "never". */
   stage: StageId | null;
   rows: LadderRow[] | null;
+  /**
+   * Single options that, switched on top of the configuration in use, make
+   * this pair equal. The cascade is cumulative, so it can only say which
+   * prefix of the pipeline works, never which one option is responsible.
+   * With Portuguese stemming, "cafe" and "café" both reduce to "caf", so
+   * the cascade converges at stemming while the narrow fix is folding.
+   */
+  fixableBy: FixableOption[];
   /**
    * The word never made it into the search at all: the active options
    * dropped it from the query itself, so no document could match on it.

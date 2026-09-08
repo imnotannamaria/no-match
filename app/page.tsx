@@ -1,62 +1,71 @@
 "use client";
 
-// Phase 3: the stage ladder. For every absent document, explain which
-// stage killed the match, per query word. Still plain -- no design system
-// yet, that's phase 6.
+// Phase 5: two configurations side by side. The contrast between the two
+// counts is the whole demo, so nothing here may make A and B behave
+// differently: they are one component with different props.
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { analyzerClient } from "@/lib/alyze/client";
-import { sanitizeOptions, canEnableCaseSensitive } from "@/lib/alyze/validate";
-import { DEFAULT_OPTIONS, type AnalysisOptions, type Token } from "@/lib/alyze/types";
+import type { AnalysisOptions, Token } from "@/lib/alyze/types";
 import { evaluateDocument } from "@/lib/search/match";
 import { explainEmptyQuery } from "@/lib/search/empty-query";
 import { EXAMPLE_CORPUS_PT, type ExampleDocument } from "@/lib/corpora/example-pt";
 import { buildCorpusStats, rank } from "@/lib/bm25/score";
-import { DEFAULT_BM25, type BM25Params, type CorpusStats } from "@/lib/bm25/types";
 import { explainDocument, extractRawWords } from "@/lib/ladder/explain";
-import { checkMaxLength } from "@/lib/ladder/max-length";
+import { applyFix, suggestFix, type Fix } from "@/lib/ladder/fix";
+import type { DocumentExplanation } from "@/lib/ladder/types";
 import {
-  NEVER_ADVICE,
-  PHRASE_ONLY_MISS,
-  VERDICT_COPY,
-  convergeAdvice,
-  disappearedAdvice,
-  droppedFromQueryAdvice,
-  stageLabel,
-} from "@/lib/ladder/copy";
-import type { DocumentExplanation, LadderExplanation } from "@/lib/ladder/types";
+  COLUMN_IDS,
+  initialConfigs,
+  otherColumn,
+  type ColumnConfig,
+  type ColumnId,
+  type ColumnResult,
+} from "@/lib/columns";
+import { Column } from "@/app/components/column";
+import { CorpusPanel } from "@/app/components/corpus-panel";
+import { SchemaPanel } from "@/app/components/schema-panel";
+import { SidePanel } from "@/app/components/side-panel";
+import { StatusBar, StatusBarItem } from "@/app/components/entrepta/status-bar";
 
-interface DocResult {
-  doc: ExampleDocument;
-  /** Kept so ranking can re-run without going back to the analyzer. */
-  tokens: Token[];
-  matched: boolean;
-  matchedTerms: string[];
+/**
+ * Everything the panel needs, captured when it opens. Holding a snapshot
+ * rather than reading live state is what keeps an answer tied to the
+ * question that produced it: changing a toggle afterwards cannot rewrite
+ * the explanation under the reader.
+ */
+interface OpenPanel {
+  columnId: ColumnId;
+  docId: string;
+  docText: string;
+  query: string;
+  options: AnalysisOptions;
+  phrase: boolean;
   phraseOnlyMiss: boolean;
+  queryTokens: Token[];
+  docTokens: Token[];
 }
 
-interface SearchState {
-  queryTokens: Token[];
-  results: DocResult[];
-  stats: CorpusStats;
-}
+type Ranked = Record<ColumnId, ReturnType<typeof rank<ColumnResult["results"][number]>>>;
 
 export default function Home() {
   const [ready, setReady] = useState(false);
   const [bootError, setBootError] = useState<string | null>(null);
+
   const [docs, setDocs] = useState<ExampleDocument[]>(EXAMPLE_CORPUS_PT);
+  const [corpusOpen, setCorpusOpen] = useState(true);
   const [query, setQuery] = useState("cafe");
-  const [options, setOptions] = useState<AnalysisOptions>(DEFAULT_OPTIONS);
-  const [phrase, setPhrase] = useState(false);
-  const [lastSearch, setLastSearch] = useState<SearchState | null>(null);
-  const [bm25, setBm25] = useState<BM25Params>(DEFAULT_BM25);
+  const [configs, setConfigs] = useState(initialConfigs);
+
+  const [results, setResults] = useState<Record<ColumnId, ColumnResult> | null>(null);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [emptyQueryNote, setEmptyQueryNote] = useState<string | null>(null);
-  // Bumped on every search. Part of each AbsentDoc's key, so a new search
-  // throws away explanations computed for the previous one instead of
-  // leaving a stale answer on screen.
-  const [runId, setRunId] = useState(0);
+
+  const [panel, setPanel] = useState<OpenPanel | null>(null);
+  const [explanation, setExplanation] = useState<DocumentExplanation | null>(null);
+  const [explaining, setExplaining] = useState(false);
+  const [explainError, setExplainError] = useState<string | null>(null);
+  const explainToken = useRef(0);
 
   useEffect(() => {
     analyzerClient.ready().then(
@@ -65,388 +74,265 @@ export default function Home() {
     );
   }, []);
 
-  function updateOption<K extends keyof AnalysisOptions>(key: K, value: AnalysisOptions[K]) {
-    setOptions((prev) => sanitizeOptions({ ...prev, [key]: value }));
-  }
+  const setConfig = useCallback((id: ColumnId, next: ColumnConfig) => {
+    setConfigs((prev) => ({ ...prev, [id]: next }));
+  }, []);
 
-  function updateDoc(id: string, text: string) {
-    setDocs((prev) => prev.map((d) => (d.id === id ? { ...d, text } : d)));
-  }
+  /**
+   * Opening the panel is an event, so the work happens here rather than in
+   * an effect. The snapshot is taken now, and `explainToken` drops the
+   * result if another document was opened while this one was loading.
+   */
+  async function openPanel(id: ColumnId, docId: string) {
+    const result = results?.[id];
+    const target = result?.results.find((r) => r.doc.id === docId);
+    if (!result || !target) return;
 
-  function removeDoc(id: string) {
-    setDocs((prev) => prev.filter((d) => d.id !== id));
-  }
+    const snapshot: OpenPanel = {
+      columnId: id,
+      docId,
+      docText: target.doc.text,
+      query,
+      options: configs[id].options,
+      phrase: configs[id].phrase,
+      phraseOnlyMiss: target.phraseOnlyMiss,
+      queryTokens: result.queryTokens,
+      docTokens: target.tokens,
+    };
 
-  function addDoc() {
-    setDocs((prev) => [...prev, { id: `doc-${Date.now()}`, text: "" }]);
+    const token = ++explainToken.current;
+    setPanel(snapshot);
+    setExplanation(null);
+    setExplainError(null);
+    setExplaining(true);
+
+    try {
+      const [queryWords, docWords] = await Promise.all([
+        extractRawWords(snapshot.query),
+        extractRawWords(snapshot.docText),
+      ]);
+      const next = await explainDocument(
+        queryWords,
+        docWords,
+        snapshot.options,
+        snapshot.phraseOnlyMiss,
+      );
+      if (token === explainToken.current) setExplanation(next);
+    } catch (err) {
+      if (token === explainToken.current) {
+        setExplainError(err instanceof Error ? err.message : String(err));
+      }
+    } finally {
+      if (token === explainToken.current) setExplaining(false);
+    }
   }
 
   async function search() {
     setError(null);
     setSearching(true);
-    setEmptyQueryNote(null);
-    setRunId((n) => n + 1);
+    setPanel(null);
+
     try {
-      const queryTokens: Token[] = await analyzerClient.analyze(query, options);
+      const entries = await Promise.all(
+        COLUMN_IDS.map(async (id) => {
+          const { options, phrase } = configs[id];
+          const queryTokens = await analyzerClient.analyze(query, options);
 
-      if (queryTokens.length === 0) {
-        const note = await explainEmptyQuery(query, options);
-        setEmptyQueryNote(note);
-        setLastSearch(null);
-        return;
-      }
+          const analyzed = await Promise.all(
+            docs.map(async (doc) => {
+              const tokens = await analyzerClient.analyze(doc.text, options);
+              return { doc, tokens };
+            }),
+          );
 
-      const results = await Promise.all(
-        docs.map(async (doc) => {
-          const tokens = await analyzerClient.analyze(doc.text, options);
-          const verdict = evaluateDocument(queryTokens, tokens, { phrase });
-          return { doc, tokens, ...verdict };
+          const emptyQueryNote =
+            queryTokens.length === 0 ? await explainEmptyQuery(query, options) : null;
+
+          const columnResults = analyzed.map(({ doc, tokens }) => {
+            const verdict =
+              queryTokens.length === 0
+                ? { matched: false, matchedTerms: [] as string[], phraseOnlyMiss: false }
+                : evaluateDocument(queryTokens, tokens, { phrase });
+            return { doc, tokens, ...verdict };
+          });
+
+          // Document frequency and average length are corpus-wide.
+          const stats = buildCorpusStats(analyzed.map((a) => a.tokens));
+          return [id, { queryTokens, results: columnResults, stats, emptyQueryNote }] as const;
         }),
       );
 
-      // Document frequency and average length are corpus-wide, so they are
-      // built from every document, not only the ones that matched.
-      const stats = buildCorpusStats(results.map((r) => r.tokens));
-      setLastSearch({ queryTokens, results, stats });
+      setResults(Object.fromEntries(entries) as Record<ColumnId, ColumnResult>);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
-      setLastSearch(null);
+      setResults(null);
     } finally {
       setSearching(false);
     }
   }
 
-  const caseSensitiveAllowed = canEnableCaseSensitive(options);
-  const absent = lastSearch?.results.filter((r) => !r.matched) ?? [];
+  // Ranking depends on analyzed tokens and parameters only. Moving k1, b or
+  // k3 re-runs this and touches no worker.
+  const ranked = useMemo<Ranked>(() => {
+    const empty = { A: [], B: [] } as Ranked;
+    if (!results) return empty;
 
-  // Ranking depends on the analyzed tokens and the parameters, nothing
-  // else. Moving k1, b or k3 re-runs this and touches no worker.
-  const ranked = useMemo(() => {
-    if (!lastSearch) return [];
-    const matched = lastSearch.results.filter((r) => r.matched);
-    return rank(
-      matched.map((r) => ({ item: r, tokens: r.tokens })),
-      lastSearch.queryTokens,
-      lastSearch.stats,
-      bm25,
-    );
-  }, [lastSearch, bm25]);
-
-  return (
-    <main style={{ padding: 24, fontFamily: "monospace", maxWidth: 960 }}>
-      <h1>nomatch — phase 3</h1>
-
-      {bootError ? (
-        <p role="alert" style={{ color: "#b91c1c" }}>
-          o analisador não carregou: {bootError}. Sem ele nada aqui funciona. Recarregue a página;
-          se continuar, o arquivo em /wasm/ pode não estar sendo servido.
-        </p>
-      ) : (
-        <p>{ready ? "analyzer loaded" : "loading analyzer..."}</p>
-      )}
-
-      <section style={{ marginBottom: 16 }}>
-        <h2 style={{ fontSize: 14 }}>options</h2>
-        <label style={{ display: "block" }}>
-          <input
-            type="checkbox"
-            checked={options.case_sensitive}
-            disabled={!caseSensitiveAllowed}
-            onChange={(e) => updateOption("case_sensitive", e.target.checked)}
-          />{" "}
-          case_sensitive {!caseSensitiveAllowed && "(disabled: stemming or remove_stopwords is on)"}
-        </label>
-        <label style={{ display: "block" }}>
-          <input
-            type="checkbox"
-            checked={options.ascii_folding}
-            onChange={(e) => updateOption("ascii_folding", e.target.checked)}
-          />{" "}
-          ascii_folding
-        </label>
-        <label style={{ display: "block" }}>
-          <input
-            type="checkbox"
-            checked={options.stemming}
-            onChange={(e) => updateOption("stemming", e.target.checked)}
-          />{" "}
-          stemming
-        </label>
-        <label style={{ display: "block" }}>
-          <input
-            type="checkbox"
-            checked={options.remove_stopwords}
-            onChange={(e) => updateOption("remove_stopwords", e.target.checked)}
-          />{" "}
-          remove_stopwords
-        </label>
-        <label style={{ display: "block" }}>
-          language:{" "}
-          <select
-            value={options.language}
-            onChange={(e) => updateOption("language", e.target.value)}
-          >
-            <option value="portuguese">portuguese</option>
-            <option value="english">english</option>
-          </select>
-        </label>
-        <label style={{ display: "block" }}>
-          max_token_length (bytes):{" "}
-          <input
-            type="number"
-            value={options.max_token_length}
-            min={1}
-            max={255}
-            onChange={(e) => updateOption("max_token_length", Number(e.target.value))}
-            style={{ width: 60 }}
-          />
-        </label>
-        <label style={{ display: "block" }}>
-          <input type="checkbox" checked={phrase} onChange={(e) => setPhrase(e.target.checked)} />{" "}
-          frase exata (exact phrase)
-        </label>
-      </section>
-
-      <section style={{ marginBottom: 16 }}>
-        <h2 style={{ fontSize: 14 }}>ordenação (BM25)</h2>
-        <p style={{ fontSize: 12, color: "#555", margin: "0 0 6px" }}>
-          Mexer aqui muda só a ordem dos resultados. Nada é analisado de novo.
-        </p>
-        {(
-          [
-            ["k1", "quão rápido repetir a palavra para de ajudar", 0.1],
-            ["b", "quanto um documento longo é penalizado", 0.05],
-            ["k3", "quanto pesa repetir a palavra na busca", 0.5],
-          ] as const
-        ).map(([key, help, step]) => (
-          <label key={key} style={{ display: "block" }}>
-            {key}:{" "}
-            <input
-              type="number"
-              value={bm25[key]}
-              min={0}
-              step={step}
-              onChange={(e) => setBm25((prev) => ({ ...prev, [key]: Number(e.target.value) }))}
-              style={{ width: 70 }}
-            />{" "}
-            <span style={{ fontSize: 12, color: "#555" }}>{help}</span>
-          </label>
-        ))}
-      </section>
-
-      <section style={{ marginBottom: 16 }}>
-        <h2 style={{ fontSize: 14 }}>search</h2>
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          style={{ width: "100%", fontFamily: "monospace", fontSize: 16, padding: 6 }}
-        />
-        <button onClick={search} disabled={!ready || searching} style={{ marginTop: 8 }}>
-          {searching ? "searching..." : "buscar"}
-        </button>
-        {error && (
-          <p role="alert" style={{ color: "#b91c1c" }}>
-            {error}
-          </p>
-        )}
-        {emptyQueryNote && <p style={{ color: "#b45309" }}>{emptyQueryNote}</p>}
-      </section>
-
-      <section style={{ marginBottom: 16 }}>
-        <h2 style={{ fontSize: 14 }}>
-          corpus <button onClick={addDoc}>+ documento</button>
-        </h2>
-        {docs.map((d) => (
-          <div key={d.id} style={{ display: "flex", gap: 8, marginBottom: 4 }}>
-            <span style={{ width: 60 }}>{d.id}</span>
-            <textarea
-              value={d.text}
-              onChange={(e) => updateDoc(d.id, e.target.value)}
-              rows={1}
-              style={{ flex: 1, fontFamily: "monospace" }}
-              aria-label={`documento ${d.id}`}
-            />
-            <button onClick={() => removeDoc(d.id)} aria-label={`remover ${d.id}`}>
-              ×
-            </button>
-          </div>
-        ))}
-      </section>
-
-      {lastSearch && (
-        <section>
-          <h2 style={{ fontSize: 14 }}>resultados · {ranked.length}</h2>
-          <ol>
-            {ranked.map(({ item, score }) => (
-              <li key={item.doc.id}>
-                <strong>{item.doc.id}</strong>: {item.doc.text}{" "}
-                <span style={{ color: "#666" }}>
-                  [{item.matchedTerms.join(", ")}] score {score.toFixed(3)}
-                </span>
-              </li>
-            ))}
-          </ol>
-
-          <h2 style={{ fontSize: 14 }}>ausentes · {absent.length}</h2>
-          {absent.map((r) => (
-            <AbsentDoc
-              key={`${r.doc.id}::${runId}`}
-              doc={r.doc}
-              query={query}
-              options={options}
-              phraseOnlyMiss={r.phraseOnlyMiss}
-            />
-          ))}
-        </section>
-      )}
-    </main>
-  );
-}
-
-function AbsentDoc({
-  doc,
-  query,
-  options,
-  phraseOnlyMiss,
-}: {
-  doc: ExampleDocument;
-  query: string;
-  options: AnalysisOptions;
-  phraseOnlyMiss: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [explanation, setExplanation] = useState<DocumentExplanation | null>(null);
-  const [failed, setFailed] = useState<string | null>(null);
-
-  async function explain() {
-    setOpen(true);
-    if (explanation) return; // this instance is scoped to one search, so it stays valid
-    setLoading(true);
-    setFailed(null);
-    try {
-      const [queryWords, docWords] = await Promise.all([
-        extractRawWords(query),
-        extractRawWords(doc.text),
-      ]);
-      setExplanation(await explainDocument(queryWords, docWords, options, phraseOnlyMiss));
-    } catch (err) {
-      setFailed(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoading(false);
+    for (const id of COLUMN_IDS) {
+      const result = results[id];
+      const matched = result.results.filter((r) => r.matched);
+      empty[id] = rank(
+        matched.map((r) => ({ item: r, tokens: r.tokens })),
+        result.queryTokens,
+        result.stats,
+        configs[id].bm25,
+      );
     }
+    return empty;
+  }, [results, configs]);
+
+  const fix: Fix | null = useMemo(() => {
+    if (!panel || !explanation) return null;
+    return suggestFix(explanation, panel.options, panel.phrase);
+  }, [panel, explanation]);
+
+  function handleApplyFix() {
+    if (!panel || !fix) return;
+    const source = configs[panel.columnId];
+    const target = otherColumn(panel.columnId);
+    const applied = applyFix(fix, panel.options, panel.phrase);
+    setConfig(target, { ...source, options: applied.options, phrase: applied.phrase });
   }
 
   return (
-    <div style={{ marginBottom: 8, borderLeft: "2px solid #ccc", paddingLeft: 8 }}>
-      <div>
-        <strong>{doc.id}</strong>: {doc.text}{" "}
-        <button onClick={explain} disabled={loading} aria-expanded={open}>
-          {loading ? "analisando..." : "por que não bateu?"}
-        </button>
-      </div>
+    <div className="min-h-screen bg-[var(--bg-canvas)] px-5 pt-5 pb-20 font-mono text-[var(--fg-primary)]">
+      <header className="mb-5 flex flex-wrap items-baseline gap-4">
+        <span className="font-serif text-[26px] tracking-tight">
+          nomatch<span className="text-[var(--fg-brand)]">.</span>
+        </span>
+        <span className="text-[11px] text-[var(--fg-secondary)]">
+          {"// por que esse documento não apareceu na minha busca?"}
+        </span>
+        <span className="ml-auto text-[11px] text-[var(--fg-muted)]">
+          o match é entre tokens, não entre palavras
+        </span>
+      </header>
 
-      {failed && (
-        <p role="alert" style={{ color: "#b91c1c" }}>
-          não deu para analisar: {failed}
-        </p>
-      )}
+      <div className="mx-auto mb-2 max-w-[760px]">
+        <div className="mb-1.5 flex items-baseline justify-between gap-3">
+          <label
+            htmlFor="query"
+            className="text-[11px] uppercase tracking-[0.08em] text-[var(--fg-muted)]"
+          >
+            ◆ busca
+          </label>
+          <span className="truncate text-[11px] text-[var(--fg-muted)]">
+            as duas colunas usam esta busca
+          </span>
+        </div>
+        <input
+          id="query"
+          value={query}
+          spellCheck={false}
+          placeholder="digite a busca"
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && ready && !searching) search();
+          }}
+          className="w-full rounded-[10px] border border-[var(--border-strong)] bg-[var(--bg-surface)] px-4 py-3.5 font-mono text-[22px] text-[var(--fg-primary)] outline-none focus-visible:border-[var(--fg-brand)] focus-visible:shadow-[0_0_0_3px_var(--bg-surface-brand)]"
+        />
 
-      {open && explanation && (
-        <div style={{ marginTop: 4, marginBottom: 8 }}>
-          {explanation.phraseOnlyMiss && (
-            <p style={{ fontSize: 12, background: "#fff7ed", padding: 8, margin: "6px 0" }}>
-              {PHRASE_ONLY_MISS}
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={search}
+            disabled={!ready || searching}
+            className="rounded-lg border border-[var(--fg-brand)] bg-[var(--fg-brand)] px-3.5 py-1.5 text-xs text-[var(--bg-canvas)] hover:bg-[var(--fg-brand-hover)] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {searching ? "buscando…" : "buscar"}
+          </button>
+
+          {bootError ? (
+            <p role="alert" className="text-[11px] text-[var(--status-error-fg)]">
+              o analisador não carregou: {bootError}. Sem ele nada aqui funciona.
+            </p>
+          ) : !ready ? (
+            <p className="text-[11px] text-[var(--fg-secondary)]">
+              abrindo o analisador · lista de stopwords + stemmer
+            </p>
+          ) : null}
+
+          {error && (
+            <p role="alert" className="text-[11px] text-[var(--status-error-fg)]">
+              {error}
             </p>
           )}
-          {explanation.words.map((word) => (
-            <LadderView
-              key={word.queryWord}
-              exp={word}
-              maxTokenLength={options.max_token_length}
-              phraseOnlyMiss={explanation.phraseOnlyMiss}
+        </div>
+      </div>
+
+      <div className="mt-5 flex flex-col items-stretch gap-4 lg:flex-row lg:items-start">
+        <CorpusPanel
+          docs={docs}
+          open={corpusOpen}
+          onToggleOpen={() => setCorpusOpen((v) => !v)}
+          onChangeDoc={(id, text) =>
+            setDocs((prev) => prev.map((d) => (d.id === id ? { ...d, text } : d)))
+          }
+          onRemoveDoc={(id) => setDocs((prev) => prev.filter((d) => d.id !== id))}
+          onAddDoc={() =>
+            setDocs((prev) => [...prev, { id: `doc-${prev.length + 1}`, text: "" }])
+          }
+        />
+
+        <div className="grid min-w-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-2">
+          {COLUMN_IDS.map((id) => (
+            <Column
+              key={id}
+              id={id}
+              config={configs[id]}
+              result={results?.[id] ?? null}
+              ranked={ranked[id]}
+              onChangeConfig={(next) => setConfig(id, next)}
+              onOpenPanel={(docId) => openPanel(id, docId)}
             />
           ))}
         </div>
-      )}
-    </div>
-  );
-}
-
-function LadderView({
-  exp,
-  maxTokenLength,
-  phraseOnlyMiss,
-}: {
-  exp: LadderExplanation;
-  maxTokenLength: number;
-  phraseOnlyMiss: boolean;
-}) {
-  const length = checkMaxLength(exp.queryWord, maxTokenLength);
-
-  return (
-    <div style={{ margin: "6px 0", padding: 8, background: "#f7f7f7", fontSize: 12 }}>
-      <div>
-        <strong>&quot;{exp.queryWord}&quot;</strong>{" "}
-        {exp.droppedFromQuery ? (
-          droppedFromQueryAdvice(exp.droppedFromQuery.reason, exp.droppedFromQuery.bytes, maxTokenLength)
-        ) : phraseOnlyMiss ? (
-          <>está neste documento. A frase exata é que não fecha.</>
-        ) : exp.kind === "converge" && exp.stage ? (
-          <>
-            só fica igual a &quot;{exp.docWord}&quot; a partir do estágio {exp.stage}.{" "}
-            {convergeAdvice(exp.stage)}
-          </>
-        ) : exp.kind === "disappeared" && exp.stage ? (
-          disappearedAdvice(exp.stage, exp.docWord ?? exp.queryWord)
-        ) : (
-          NEVER_ADVICE
-        )}
       </div>
 
-      {!exp.droppedFromQuery && length.exceeds && (
-        <div style={{ color: "#b91c1c", marginTop: 4 }}>
-          Separado disso: essa palavra ocupa {length.bytes} bytes
-          {length.bytes !== length.chars && ` (${length.chars} caracteres)`}, acima do limite de{" "}
-          {maxTokenLength}. Aumente max_token_length para ela virar um token.
-        </div>
+      <SchemaPanel configs={configs} />
+
+      {panel && (
+        <SidePanel
+          columnId={panel.columnId}
+          targetColumnId={otherColumn(panel.columnId)}
+          docId={panel.docId}
+          docText={panel.docText}
+          explanation={explanation}
+          loading={explaining}
+          error={explainError}
+          maxTokenLength={panel.options.max_token_length}
+          queryRaw={panel.query}
+          queryTokens={panel.queryTokens}
+          docTokens={panel.docTokens}
+          fix={fix}
+          onApplyFix={handleApplyFix}
+          onClose={() => setPanel(null)}
+        />
       )}
 
-      {exp.rows && (
-        <table style={{ marginTop: 6, borderCollapse: "collapse" }}>
-          <caption style={{ captionSide: "top", textAlign: "left", fontSize: 11, color: "#555" }}>
-            o que cada etapa faz com as duas palavras
-          </caption>
-          <thead>
-            <tr>
-              <th align="left" scope="col">
-                etapa
-              </th>
-              <th align="left" scope="col">
-                busca
-              </th>
-              <th align="left" scope="col">
-                documento
-              </th>
-              <th align="left" scope="col">
-                resultado
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {exp.rows.map((row) => (
-              <tr key={row.stage}>
-                <th align="left" scope="row" style={{ fontWeight: "normal" }}>
-                  {stageLabel(row.stage)}
-                </th>
-                <td>{row.queryForm ?? "descartada"}</td>
-                <td>{row.docForm ?? "descartada"}</td>
-                <td>{VERDICT_COPY[row.verdict]}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <StatusBar
+        left={
+          <>
+            <StatusBarItem>nomatch</StatusBarItem>
+            <StatusBarItem>bosco</StatusBarItem>
+            <StatusBarItem>{docs.length} documentos</StatusBarItem>
+          </>
+        }
+        right={
+          <StatusBarItem>
+            {results ? `A ${ranked.A.length} · B ${ranked.B.length}` : "nenhuma busca ainda"}
+          </StatusBarItem>
+        }
+      />
     </div>
   );
 }

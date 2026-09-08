@@ -125,3 +125,47 @@ Measured in the browser by counting `Worker.prototype.postMessage`: a search ove
 ### Scores are shown to three decimals
 
 Enough to separate two close documents in a small corpus, short enough for the narrow column the design reserves for it.
+
+## Phase 5
+
+### entrepta, theme bosco
+
+`npx @entrepta/cli@latest init --theme bosco`, then `add button badge input status-bar tabs`. Bosco is the blue the design canvas was drawn in, and its `--fg-brand` is `#2563eb`. The components land in `app/components/entrepta/` as owned code: they are edited directly rather than wrapped from outside.
+
+New dependencies come with it: `clsx`, `tailwind-merge` and `class-variance-authority` for the `cn()` helper and variant definitions, `@radix-ui/react-slot` for `asChild`, `@radix-ui/react-tabs`, and `lucide-react` for the loading spinner. All of them arrived with the design system rather than being chosen separately.
+
+Every colour in the new interface is a CSS custom property from that theme. There is no hardcoded hex in `app/`, so switching the theme changes the whole tool.
+
+### The fix button writes into the other column
+
+Decided before building. The tool is a comparison, so the button's job is to build the comparison that proves the fix, not to mutate the thing being inspected. Clicking it copies the opened column's configuration, applies the one change, and puts the result on the opposite side. The column you were reading keeps its `0`, the other one shows the count after the fix, and both are on screen together. The button names its destination.
+
+Verified end to end: both columns at 1 for "cafe", open the panel from A, click, search again, A stays 1 and B becomes 3.
+
+### The fix names the narrowest option that works, not the stage the cascade lands on
+
+This one came out of running the founding example rather than reasoning about it.
+
+The cascade is cumulative, so it can only report which prefix of the pipeline makes two words equal, never which single option is responsible. With `language: portuguese`, the Snowball stemmer strips the final vowel from both `cafe` and `café`, so both reduce to `caf` and the cascade converges at stemming, one stage before folding. The ladder was telling the truth and giving bad advice: stemming collapses whole families of words across the corpus, while `ascii_folding` only touches accents. Recommending the broader change because it happens to come first in a documented ordering is the wrong hammer.
+
+`lib/ladder/explain.ts` now also asks the analyzer, for the winning pair, which single options switched on over the configuration in use actually make the two words equal. `suggestFix` prefers those, narrowest first, and falls back to the cascade stage when no single option does it. The ladder table still shows where the cascade converges, because that is true and worth seeing.
+
+### The panel holds a snapshot, not a live reference
+
+Opening the panel captures the query, the options, the tokens and the document text as they were for the search that produced the result. Nothing in the panel reads live state. That is what keeps an explanation tied to the question that produced it, and it is the structural version of the fix made in phase 3, where an explanation could outlive its search.
+
+The work also runs from the click handler rather than an effect, since opening the panel is an event. A counter drops the result if a second document is opened while the first is still loading.
+
+### The schema panel is desktop only
+
+It is a fixed 400px panel, and at 375px there is nothing sensible to do with it that would not fight the columns for space. It renders from `lg` up. The configuration is still fully visible in the toggles at any width; the panel is a convenience for copying it out.
+
+### 375px
+
+Columns stack, the corpus panel becomes full width, the side panel goes full width, and the document does not scroll horizontally. Measured, not assumed: `scrollWidth` equals `clientWidth` at 375px. The status bar hides below `sm`, which is entrepta's own behaviour for that component.
+
+### Colour rule, corrected to match how the theme actually works
+
+`CLAUDE.md` said brand accents derive from `--fg-brand` with `color-mix()`. This build of entrepta does not work that way: it defines the brand tints per theme as rgba literals, `--bg-surface-brand` among them, so there is nothing to mix at the call site. The intent of the rule holds, and is what the code does: no hardcoded hex anywhere in `app/` or `lib/`, every colour a token, so changing the theme changes the whole tool. The rule text now describes the mechanism that exists rather than one that does not.
+
+While checking it, two error messages were rendering in brand blue, which reads as information rather than failure. They use `--status-error-fg` now.

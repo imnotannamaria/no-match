@@ -12,6 +12,7 @@ import {
   STAGES,
   type DocumentExplanation,
   type LadderExplanation,
+  type FixableOption,
   type StageId,
 } from "@/lib/ladder/types";
 
@@ -60,6 +61,34 @@ function wordFormsAcrossStages(word: string, language: string): Promise<(string 
 /** Clears the per-word form cache. Exposed for tests; the running app never needs this. */
 export function clearFormsCache(): void {
   formsCache.clear();
+}
+
+/**
+ * Which single options, switched on over the configuration in use, make
+ * these two words equal. Answers "what do I turn on" directly, instead of
+ * inferring it from where the cumulative cascade first converges.
+ */
+const FIXABLE: FixableOption[] = ["ascii_folding", "stemming"];
+
+async function fixableBy(
+  queryWord: string,
+  docWord: string,
+  options: AnalysisOptions,
+): Promise<FixableOption[]> {
+  const found: FixableOption[] = [];
+
+  for (const option of FIXABLE) {
+    if (options[option]) continue; // already on, so it cannot be the fix
+    // stemming requires case_sensitive: false, and so does the comparison.
+    const candidate = { ...options, [option]: true, case_sensitive: false };
+    const [q, d] = await Promise.all([
+      analyzerClient.analyze(queryWord, candidate),
+      analyzerClient.analyze(docWord, candidate),
+    ]);
+    if (q.length > 0 && d.length > 0 && q[0].text === d[0].text) found.push(option);
+  }
+
+  return found;
 }
 
 function stageOrder(id: StageId | null): number {
@@ -113,6 +142,7 @@ export async function explainQueryWord(
       kind,
       stage,
       rows: buildLadderRows(queryForms, docFormsList[i]),
+      fixableBy: [],
       droppedFromQuery: dropped,
     };
 
@@ -120,16 +150,19 @@ export async function explainQueryWord(
     if (!best || stageOrder(stage) < stageOrder(best.stage)) best = candidate;
   }
 
-  return (
-    best ?? {
+  if (!best) {
+    return {
       queryWord,
       docWord: null,
       kind: "never",
       stage: null,
       rows: null,
+      fixableBy: [],
       droppedFromQuery: dropped,
-    }
-  );
+    };
+  }
+
+  return { ...best, fixableBy: await fixableBy(queryWord, best.docWord!, options) };
 }
 
 /**

@@ -5,6 +5,7 @@
 // CLAUDE.md: interface text is part of the product, not a caption. Written
 // for someone who has never heard the word "token".
 
+import type { Fix } from "@/lib/ladder/fix";
 import type { LadderVerdict, StageId } from "@/lib/ladder/types";
 
 interface StageCopy {
@@ -69,6 +70,12 @@ export function disappearedAdvice(stage: StageId, word: string): string {
   return `o documento tem essa palavra, mas ${option} ${does}, e "${word}" é uma delas. Desligue ${option} para achar este documento.`;
 }
 
+/** Names the option that actually fixes the pair, and what it does. */
+export function optionAdvice(option: "ascii_folding" | "stemming"): string {
+  const stage = option === "ascii_folding" ? "S4" : "S3";
+  return `Ligue ${option}, que ${STAGE_COPY[stage].does}.`;
+}
+
 export const NEVER_ADVICE =
   "nenhuma palavra deste documento vira igual a essa, em nenhum estágio. Não é configuração: são palavras diferentes mesmo.";
 
@@ -82,3 +89,28 @@ export function droppedFromQueryAdvice(reason: "stopword" | "length", bytes: num
 
 export const PHRASE_ONLY_MISS =
   "todas as palavras da busca estão neste documento, mas não uma do lado da outra. Nenhum estágio da análise tirou ele: foi a frase exata. Desligue frase exata para trazer este documento de volta.";
+
+/** The toggles, in the order the cascade applies them. */
+export const OPTION_COPY: {
+  key: "case_sensitive" | "remove_stopwords" | "stemming" | "ascii_folding";
+  help: string;
+}[] = [
+  { key: "case_sensitive", help: "diferencia maiúscula de minúscula" },
+  { key: "remove_stopwords", help: "descarta palavras muito comuns, como de, da, o" },
+  { key: "stemming", help: "corta a palavra até a raiz, correr e correu viram corr" },
+  { key: "ascii_folding", help: "tira o acento, café vira cafe" },
+];
+
+/** What the fix button says, naming both the change and where it lands. */
+export function fixLabel(fix: Fix, target: string): string {
+  switch (fix.kind) {
+    case "enable":
+      return `ligar ${fix.option} na coluna ${target}`;
+    case "disable":
+      return `desligar ${fix.option} na coluna ${target}`;
+    case "disable-phrase":
+      return `desligar frase exata na coluna ${target}`;
+    case "raise-max-token-length":
+      return `subir max_token_length para ${fix.to} na coluna ${target}`;
+  }
+}

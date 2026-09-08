@@ -254,7 +254,7 @@ The attribution is the product's central claim, and it is the first thing an int
 - The ladder runs per document per query, not per keystroke. Debounce, or run it when the query settles
 - Every count shown to a person is in bytes, with characters beside it when they differ
 - entrepta components are owned code. Edit them directly, do not wrap and override from outside
-- Brand accents derive from `--fg-brand` with `color-mix()`. Never a hardcoded blue hex, or the theme stops reacting
+- Every colour is a theme token from `app/globals.css`. Never a hardcoded hex, or the theme stops reacting. Brand accents are `--fg-brand` and the tints entrepta derives from it per theme, such as `--bg-surface-brand`. Errors use `--status-error-fg`, not the brand
 - Mono is the default font. Reach for sans only in long prose
 - Tailwind v4 scans Markdown, so a class written as an example in a doc gets compiled. Write it out in full, and never put a wildcard inside the brackets
 - Before committing, run `npm run lint` and `npx tsc --noEmit`, and the tests once Vitest is in. A green commit is the baseline. Do not commit a red one without saying so

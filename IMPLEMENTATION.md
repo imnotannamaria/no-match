@@ -12,7 +12,7 @@ The diagrams behind these phases are in [public/board.png](public/board.png): wh
 | 2 | Corpus, search, matched or did not match | Done |
 | 3 | The stage ladder | Done |
 | 4 | BM25 and ranking | Done |
-| 5 | A against B | Not started |
+| 5 | A against B | Done |
 | 6 | Corpora and polish | Not started |
 
 ---
@@ -106,15 +106,15 @@ The board's middle panel is the check that matters here: tokenize and analyse de
 
 Two columns, independent configurations, the side panel, the fix button, the schema JSON with copy.
 
-- [ ] Column A and column B are the same component, different props
-- [ ] The invalid combination is blocked in both columns, not just the first
-- [ ] The fix button takes a document from absent to present in one click
-- [ ] The schema panel copies a config that matches the `full_text_search` parameter names exactly
-- [ ] Positions and their holes are rendered in the token view, not hidden. `CLAUDE.md` is explicit on this, and nothing has shown them since phase 1
-- [ ] Every accent derives from `--fg-brand` with `color-mix()`, no hardcoded hex
-- [ ] Real semantics, `aria-pressed` on the toggles, and anything carried by colour also carried in text
-- [ ] Reasoned about 375px: the columns stack, the corpus panel collapses, the panel goes full width
-- [ ] Every row with two children and `justify-between` has a stated answer for what happens when they stop fitting
+- [x] Column A and column B are the same component, different props
+- [x] The invalid combination is blocked in both columns, not just the first
+- [x] The fix button takes a document from absent to present in one click
+- [x] The schema panel copies a config that matches the `full_text_search` parameter names exactly
+- [x] Positions and their holes are rendered in the token view, not hidden. `CLAUDE.md` is explicit on this, and nothing has shown them since phase 1
+- [x] Every colour comes from a theme token, no hardcoded hex anywhere in `app/` or `lib/`
+- [x] Real semantics, `aria-pressed` on the toggles, and anything carried by colour also carried in text
+- [x] Reasoned about 375px: the columns stack, the corpus panel collapses, the panel goes full width
+- [x] Every row with two children and `justify-between` has a stated answer for what happens when they stop fitting
 
 The fix button writes into the **other** column. It copies the configuration of the column the panel was opened from, turns on the option that fixes the miss, and puts the result on the opposite side. The column being inspected is never mutated, so the `0` that showed the problem stays on screen next to the `1` that proves the fix. The button names its destination, so nothing moves by surprise.
 
