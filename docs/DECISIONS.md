@@ -230,4 +230,17 @@ It is now the same entrepta dialog with a `drawer` variant: anchored right inste
 
 That last part fixed a quiet bug: `font-serif` in a component was resolving to Tailwind's default Georgia stack, not Newsreader. The counts and titles had never rendered in the project's own serif.
 
-Verified after the change: loading the page, running a search and opening an explanation makes zero requests to any host but `localhost`.
+Verified after the change: loading the page, running a search and opening an explanation makes zero requests to any host but `localhost`. That measurement predates Vercel Analytics, which is same-origin and carries no content from the tool; see the entry below.
+
+
+## Vercel Analytics, and the sentence it forced me to rewrite
+
+Page views on the deployed site, through `@vercel/analytics`. Fourth dependency added, and the only one that is not part of the design system.
+
+It needed a doc change more than it needed a code change. The README's first section said "nothing you paste leaves your browser", which is still true, next to a measurement saying the app makes zero requests to any host but `localhost`, which stops being the whole story the moment a beacon exists. Both sentences were written to be trusted, and leaving them to be technically defensible would be the worst version of this.
+
+So the README now says what is actually true: the deployed site counts page views, the request is first-party to its own domain, it carries no corpus, no query and no token, and running it locally produces no analytics at all. The corpus and the search still never leave the browser, which is the promise that matters here.
+
+It renders only when `NEXT_PUBLIC_VERCEL_ENV` is set, which Vercel sets and nothing else does. Off Vercel the endpoint does not exist, so the script is a 404 in the console of anyone running a production build locally, and "no analytics locally" would have been a half-truth. Verified both ways: without the variable, a full session makes 20 requests and none fail; with it, the beacon appears and is still same-origin.
+
+Worth being precise about what the alternative was: no analytics, and no way to know whether anyone opened the thing.

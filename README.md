@@ -12,6 +12,7 @@ Read this part first.
 - No network call is made to their product. Nothing you paste leaves your browser
 - The analysis engine is the real `alyze`, MIT licensed, compiled from a specific commit, recorded in `docs/DECISIONS.md`
 - The BM25 ranking is mine, written for this project in TypeScript. It follows the documented meaning of `k1`, `b` and `k3`, but it is not their code and you should not read it as a reference for how their production ranking behaves
+- The deployed site counts page views through Vercel Analytics. That is a first-party request to the site's own domain, and it carries no content: not your corpus, not your search, not a token. Run it locally and there is no analytics at all
 
 Everything below is what I verified. Nothing here claims parity with production search anywhere.
 

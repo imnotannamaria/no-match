@@ -50,6 +50,7 @@ What is actually installed, verified against `package.json`. When this drifts, f
 | Analysis engine | `alyze`, Rust, compiled to WASM and committed under `public/wasm/` |
 | Ranking | BM25, written here in TypeScript |
 | Deploy | Vercel |
+| Analytics | `@vercel/analytics`, page views only, first-party, no content |
 
 No global state manager. No fetch library. No backend. A new dependency needs a line in `docs/DECISIONS.md` saying why.
 

@@ -1,11 +1,13 @@
 "use client";
 
-// The first thing a person sees. Someone landing here has no reason to know
-// what a token is, and without that the two counts on the page are just two
-// numbers. This says what the tool is for in one screen, then gets out of
-// the way and does not come back.
+// What the tool is for, in one screen. Someone landing here has no reason
+// to know what a token is, and without that the two counts on the page are
+// just two numbers.
+//
+// It never opens on its own. A dialog in front of a page nobody asked to
+// read is a toll booth, and the page already answers the question in its
+// own headline. This waits behind the button in the top bar.
 
-import { useCallback, useState, useSyncExternalStore } from "react";
 import { Button } from "@/app/components/entrepta/button";
 import {
   Dialog,
@@ -18,58 +20,15 @@ import {
   DialogTrigger,
 } from "@/app/components/entrepta/dialog";
 
-const SEEN_KEY = "nomatch:intro-seen";
-
 const STEPS = [
   "One search runs under two configurations. A is the defaults. B has a single option changed.",
   "Compare the two counts. Every document that did not come back is listed under missing.",
   "Open a missing document. It names the stage that dropped it, and the one option that brings it back.",
 ];
 
-/**
- * Whether this browser has seen the intro. Read through
- * useSyncExternalStore rather than an effect: the server has no
- * localStorage, and this is the documented way to render one thing during
- * hydration and another once the real value is known, without a flash of
- * the dialog on every visit.
- */
-function useHasSeenIntro(): boolean {
-  return useSyncExternalStore(
-    () => () => {},
-    () => {
-      try {
-        return window.localStorage.getItem(SEEN_KEY) !== null;
-      } catch {
-        // Storage can be refused. Treating that as "seen" is the quiet
-        // failure: better than showing the dialog on every single visit.
-        return true;
-      }
-    },
-    () => true,
-  );
-}
-
 export function Onboarding() {
-  const seen = useHasSeenIntro();
-  const [dismissed, setDismissed] = useState(false);
-  const [reopened, setReopened] = useState(false);
-
-  const open = reopened || (!seen && !dismissed);
-
-  const handleOpenChange = useCallback((next: boolean) => {
-    setReopened(next);
-    if (!next) {
-      setDismissed(true);
-      try {
-        window.localStorage.setItem(SEEN_KEY, "1");
-      } catch {
-        // Nothing to do. The dialog stays closed for this session either way.
-      }
-    }
-  }, []);
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog>
       <DialogTrigger asChild>
         <button
           type="button"
@@ -111,8 +70,8 @@ export function Onboarding() {
         </ol>
 
         <p className="font-mono text-[11px] leading-relaxed text-[var(--fg-muted)]">
-          {"// "}The analyzer runs in this tab, compiled to WebAssembly. No account, no upload,
-          nothing sent anywhere.
+          {"// "}The analyzer runs in this tab, compiled to WebAssembly. Your corpus and your
+          searches are never sent anywhere.
         </p>
 
         <DialogFooter>

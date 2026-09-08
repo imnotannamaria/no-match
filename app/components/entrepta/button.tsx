@@ -9,6 +9,14 @@ import { cn } from "@/lib/utils";
 const buttonVariants = cva(
   [
     "group relative inline-flex items-center justify-center gap-2 shrink-0 whitespace-nowrap",
+    // The primary variant lifts 1px on hover. A cursor resting on the bottom
+    // edge would fall outside the moved box, unhover it, and drop it back,
+    // over and over. This pseudo-element keeps the hover area larger than the
+    // button so the box under the cursor never changes. 2px, not 1: an
+    // absolute inset is measured from the padding box, and every button here
+    // has a 1px border, so -1px lands exactly on the border box and buys
+    // nothing.
+    "after:absolute after:-inset-[2px] after:rounded-[inherit] after:content-['']",
     "font-mono font-medium",
     "border rounded-[var(--radius-md)]",
     "transition-[background-color,border-color,color,box-shadow,transform,opacity] duration-150 ease-out",

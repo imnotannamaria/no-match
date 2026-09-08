@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono, Newsreader } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { ModeScript } from "@/app/components/entrepta/mode-toggle";
 import "./globals.css";
 
@@ -60,7 +61,16 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             who chose light gets a frame of dark on every navigation. */}
         <ModeScript storageKey="nomatch" />
       </head>
-      <body className="flex min-h-full flex-col">{children}</body>
+      <body className="flex min-h-full flex-col">
+        {children}
+        {/* Page views only, sent first-party to the deployment's own domain.
+            It never sees the corpus, the search, or anything typed here.
+            Rendered only on Vercel, which is the only place the endpoint
+            exists: off it, the script is a 404 in everyone's console and
+            the README's "no analytics locally" would be a half-truth.
+            See docs/DECISIONS.md and the README's first section. */}
+        {process.env.NEXT_PUBLIC_VERCEL_ENV && <Analytics />}
+      </body>
     </html>
   );
 }
